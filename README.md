@@ -40,11 +40,8 @@ pip install -r requirments-dev.txt
 **This step is required for git hooks to work!** After installing dependencies, you must install the pre-commit hooks:
 
 ```bash
-# Install pre-commit hooks (runs on git commit)
-pre-commit install
-
-# Install pre-push hooks (runs on git push)
-pre-commit install --hook-type pre-push
+# Install pre-commit hooks (runs on git commit and push)
+pre-commit install --hook-type pre-commit --hook-type pre-push
 ```
 
 **Why this is needed:** Installing the `pre-commit` package doesn't automatically set up git hooks. You must run `pre-commit install` once per repository to configure git to run the hooks.

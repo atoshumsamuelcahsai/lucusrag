@@ -40,7 +40,7 @@ class CodeElementParser:
         return [element.to_node() for element in code_elements]
 
 
-def process_code_element(code_info: CodeElement):
+def process_code_element(code_info: CodeElement) -> Document:
     """Process a single code element into a document."""
     return Document(
         page_content=code_info.code,
@@ -66,7 +66,7 @@ def process_code_element(code_info: CodeElement):
 class CodeElementGraphParser:
     """Parser for code elements to create structured documents."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Reduce to essential fields that match the document creation
         self.required_fields = ["name", "type", "file_path"]
 

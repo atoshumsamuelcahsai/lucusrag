@@ -18,9 +18,10 @@ from rag.indexer.vector_indexer import (
     graph_configure_settings,
 )
 from rag.engine import make_query_engine
+from rag.schemas.vector_config import VectorIndexConfig
 
 import logging
-import aiofiles
+import aiofiles  # type: ignore
 
 
 logger = logging.getLogger(__name__)
@@ -119,7 +120,7 @@ class CodeGraphIndexer:
         """
         logger.info("refreshing index has started........")
         t0 = time.perf_counter()
-        config = get_vector_index_config()
+        config: VectorIndexConfig = get_vector_index_config()
 
         prev = self._load_manifest()
         now = await self._snapshot_files()
@@ -136,8 +137,8 @@ class CodeGraphIndexer:
                 schema_version=self.schema_version,
             )
 
-        # Simple, safe strategy: re-run the loader (cheap for lucus repos).
-        config = get_vector_index_config()
+        # Simple, safe strategy: re-run the loader (cheap for
+        # lucus repos but generally expensive).
         docs = process_code_files(str(self.ast_dir))
         self._index = get_vector_index(docs, config)
         self._engine = make_query_engine(self._index, k=self.top_k)
@@ -185,7 +186,7 @@ class CodeGraphIndexer:
                 h.update(chunk)
         return h.hexdigest()
 
-    def _embed_signature(self, cfg) -> str:
+    def _embed_signature(self, cfg: VectorIndexConfig) -> str:
         # tie manifest to embedding choices so model/dimension change triggers rebuild
         # you can import provider/model from your Settings if you expose them
         return f"{cfg.dimension}:{cfg.similarity_metric}"

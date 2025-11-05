@@ -6,7 +6,7 @@ import time
 import typing as t
 
 from dotenv import load_dotenv
-from neo4j import Driver, GraphDatabase
+from neo4j import Driver, GraphDatabase, Session
 
 from rag.schemas import CodeElement
 from rag.schemas.vector_config import Neo4jConfig, VectorIndexConfig
@@ -58,6 +58,7 @@ class GraphDBManager:
                     logger.warning(
                         f"Retrying Neo4j connection ({attempt+1}/{self._max_retries})..."
                     )
+        assert self._driver is not None, "Driver should be initialized by now"
         return self._driver
 
     def close(self) -> None:
@@ -116,7 +117,7 @@ class GraphDBManager:
             logger.exception(f"Failed to create schema: {str(e)}")
             raise
 
-    def _index_exist(self, session, config: VectorIndexConfig) -> bool:
+    def _index_exist(self, session: Session, config: VectorIndexConfig) -> bool:
         # Check if index exists
         record = session.run(
             """
@@ -129,13 +130,13 @@ class GraphDBManager:
         ).single()
         return bool(record and record.get("exists", False))
 
-    def _drop_index(self, session, config: VectorIndexConfig) -> None:
+    def _drop_index(self, session: Session, config: VectorIndexConfig) -> None:
         # Neo4j doesn't parameterize identifiers in DROP INDEX;
         # use f-string carefully
         session.run(f"DROP INDEX {config.name} IF EXISTS")
         logger.info(f"Dropped existing vector index {config.name}")
 
-    def _create_index(self, session, config: VectorIndexConfig) -> None:
+    def _create_index(self, session: Session, config: VectorIndexConfig) -> None:
         session.run(
             """
                 CALL db.index.vector.createNodeIndex(
@@ -155,7 +156,7 @@ class GraphDBManager:
         )
 
     def _create_vector_index(
-        self, session, config: VectorIndexConfig, overwrite: bool = True
+        self, session: Session, config: VectorIndexConfig, overwrite: bool = True
     ) -> None:
         """Create or recreate a vector index with given configuration. This could be very expensive"""
         exists = self._index_exist(session, config)
@@ -217,12 +218,12 @@ class GraphDBManager:
 
     def _add_classes(
         self,
-        session,
+        session: Session,
         vector_config: VectorIndexConfig,
         code_info: CodeElement,
         element_id: str,
     ) -> None:
-        for method in code_info.methods:
+        for method in code_info.methods or []:
             method_id = f"{code_info.file_path}:function:{method}"
             session.run(
                 f"""
@@ -235,12 +236,12 @@ class GraphDBManager:
 
     def _add_inheritance(
         self,
-        session,
+        session: Session,
         vector_config: VectorIndexConfig,
         code_info: CodeElement,
         element_id: str,
     ) -> None:
-        for base in code_info.base_classes:
+        for base in code_info.base_classes or []:
             session.run(
                 f"""
                             MATCH (derived:{vector_config.node_label} {{id: $derived_id}})
@@ -252,12 +253,12 @@ class GraphDBManager:
 
     def _add_calls(
         self,
-        session,
+        session: Session,
         vector_config: VectorIndexConfig,
         code_info: CodeElement,
         element_id: str,
     ) -> None:
-        for call in code_info.calls:
+        for call in code_info.calls or []:
             call_name = call.split(".")[-1]
             session.run(
                 f"""
@@ -273,12 +274,12 @@ class GraphDBManager:
 
     def _add_dependencies(
         self,
-        session,
+        session: Session,
         vector_config: VectorIndexConfig,
         code_info: CodeElement,
         element_id: str,
     ) -> None:
-        for dep in code_info.dependencies:
+        for dep in code_info.dependencies or []:
             dep_name = dep.split(".")[-1]
             session.run(
                 f"""

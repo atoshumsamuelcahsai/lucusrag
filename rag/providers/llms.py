@@ -40,7 +40,7 @@ GET_LLM_PROVIDER: t.Mapping[LLMProvider, LLMFACTORY] = {
 }
 
 
-def get_llm(provider: t.Union[str, LLMProvider], **llm_kwargs):
+def get_llm(provider: t.Union[str, LLMProvider], **llm_kwargs: t.Any) -> Anthropic:
     """
     Resolve an LLM instance by provider name or enum.
 

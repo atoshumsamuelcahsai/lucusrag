@@ -28,7 +28,9 @@ EmbeddingFactory = t.Callable[[str], EmbeddingLike]
 _EMBEDDING_REGISTRY: dict[str, EmbeddingFactory] = {}
 
 
-def register_embedding(provider: str):
+def register_embedding(
+    provider: str,
+) -> t.Callable[[EmbeddingFactory], EmbeddingFactory]:
     """Decorator to register a new embedding provider factory."""
 
     def _decorator(factory: t.Callable[[str], EmbeddingLike]) -> EmbeddingFactory:

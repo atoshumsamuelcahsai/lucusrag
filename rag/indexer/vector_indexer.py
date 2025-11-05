@@ -1,15 +1,18 @@
 import logging
 import asyncio
 
-from rag import embedding
+from rag.providers import embeddings
 from rag.ingestion.data_loader import get_vector_index_config, process_code_files
-from rag.providers.llm import get_llm, EmbeddingProvider
+from rag.providers import get_llm, EmbeddingProvider
 from rag.parser import CodeElementGraphParser
+from llama_index.core import Document
 from llama_index.core import Settings
 from llama_index.core import VectorStoreIndex
 from llama_index.graph_stores.neo4j import Neo4jGraphStore
 from llama_index.vector_stores.neo4jvector import Neo4jVectorStore
 from rag.db.graph_db import VectorIndexConfig
+
+import typing as t
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +37,12 @@ async def graph_configure_settings(
         logger.info("Configuring LlamaIndex Settings....")
 
         custom_parser = CodeElementGraphParser()
-        embedding_model = embedding.get_embeddings(
+        embedding_model = embeddings.get_embeddings(
             provider=EmbeddingProvider(embedding_provider).value
         )
         Settings.llm = get_llm(llm_provider)
         Settings.embed_model = embedding_model
-        Settings.node_parser = custom_parser
+        Settings.node_parser = custom_parser  # type: ignore[assignment]
         Settings.num_output = num_output
         Settings.context_window = context_window
 
@@ -47,7 +50,7 @@ async def graph_configure_settings(
         logger.info("LlamaIndex Settings configured successfully.")
 
 
-def _graph_configure_settings_blocking(**kw) -> None:
+def _graph_configure_settings_blocking(**kw) -> None:  # type: ignore
     # TODO: Check for better way to do this.
     """Call the async settings config from sync code safely."""
     try:
@@ -60,9 +63,16 @@ def _graph_configure_settings_blocking(**kw) -> None:
         logger.debug("Settings called from running loop; assume configured elsewhere.")
 
 
-def get_vector_index(documents, vector_config: VectorIndexConfig):
+def get_vector_index(
+    documents: t.List[Document], vector_config: t.Optional[VectorIndexConfig] = None
+) -> VectorStoreIndex:
     """Create a vector store index with Neo4j backend
     using existing GraphDBManager."""
+    if vector_config is None:
+        logger.info(
+            "Empty vector index confguration is given," "trying to load it from evns"
+        )
+        vector_config = VectorIndexConfig.from_env()
     _graph_configure_settings_blocking()
 
     if not documents:
@@ -116,7 +126,7 @@ def get_vector_index(documents, vector_config: VectorIndexConfig):
     return index
 
 
-def get_vector_store_index(ast_cache_dir: str):
+def get_vector_store_index(ast_cache_dir: str) -> VectorStoreIndex:
     documents = process_code_files(ast_cache_dir)
     vector_config = get_vector_index_config()
     return get_vector_index(documents, vector_config)

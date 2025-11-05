@@ -4,11 +4,9 @@ Handles database population and code element processing.
 """
 
 import os
-from llama_index.core import (
-    Response,
-)
 from llama_index.core.query_engine import RetrieverQueryEngine
 from typing import Optional
+import typing as t
 
 from rag import engine
 from rag.exceptions import QueryProcessingError
@@ -36,7 +34,7 @@ async def initialize_query_engine(ast_cache_dir: str) -> RetrieverQueryEngine:
 
         logger.info(f"Creating new query engine with cache dir: {ast_cache_dir}")
         try:
-            _query_engine = await engine.get_query_engine(
+            _query_engine = engine.get_query_engine(
                 ast_cache_dir, get_vector_index_config()
             )
             logger.info("Query engine created successfully.")
@@ -67,10 +65,10 @@ async def get_query_engine() -> RetrieverQueryEngine:
         logger.info("Using existing query engine from cache")
         return _query_engine
 
-    return await initialize_query_engine()
+    return await initialize_query_engine(ast_cache_dir)
 
 
-def log_chunks_retrieved(response: Response) -> None:
+def log_chunks_retrieved(response: t.Any) -> None:
     # Log the number of source nodes/chunks used
     nodes = getattr(response, "source_nodes", None)
     if nodes is None:

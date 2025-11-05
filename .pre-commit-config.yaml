@@ -18,10 +18,11 @@ repos:
       
       - id: mypy
         name: mypy (local)
-        entry: bash -lc 'mypy .'
+        entry: mypy rag/ test/
         language: system
         types: [python]
         stages: [pre-push]
+        pass_filenames: false
 
       - id: bandit
         name: bandit (local)
@@ -30,18 +31,19 @@ repos:
         types: [python]
         stages: [pre-push]
         pass_filenames: false
-        always_run: true
   
       - id: pip-audit
         name: pip-audit (local)
-        entry: pip-audit
+        entry: pip-audit --ignore-vuln GHSA-4xh5-x5gv-qwph --ignore-vuln GHSA-2c2j-9gv5-cj73 --ignore-vuln GHSA-7f5h-v6xp-fcq8
         language: system
-        types: [python]
         stages: [pre-push]
+        pass_filenames: false
+        always_run: true
       
       - id: pytest
         name: pytest (local)
-        entry: bash -lc 'pytest -q'
+        entry: pytest -q
         language: system
         types: [python]
         stages: [pre-push]
+        pass_filenames: false

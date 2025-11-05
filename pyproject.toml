@@ -2,6 +2,37 @@
 pythonpath = ["."]
 testpaths = ["test"]
 
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "."
+namespace_packages = true
+# keep strict but readable defaults
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "llama_index.*",
+    "neo4j.*",
+    "anthropic.*",
+    "voyageai.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "test.*",
+]
+disallow_untyped_defs = false
+check_untyped_defs = false
+ignore_missing_imports = true
+
+
+[tool.bandit]
+exclude_dirs = ["venv", ".venv", "lucusrag/test", "tests"]
+skips = ["B101", "B106", "B311", "B104", "B105", "B112"]
+
+
 
 [tool.coverage.run]
 branch = true

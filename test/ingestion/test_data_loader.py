@@ -96,7 +96,7 @@ class TestGetVectorIndexConfig:
             "NEO4J_PASSWORD": "test_pass",
         },
     )
-    def test_get_vector_index_config_from_env(self):
+    def test_get_vector_index_config_from_env(self) -> None:
         """Test getting config from environment variables."""
         config = get_vector_index_config()
 
