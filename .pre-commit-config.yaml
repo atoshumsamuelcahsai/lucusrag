@@ -1,0 +1,38 @@
+fail_fast: true
+repos:
+  - repo: local
+    hooks:
+      - id: black
+        name: black (local)
+        entry: black
+        language: system
+        types: [python]
+        stages: [pre-commit]
+      
+      - id: ruff
+        name: ruff (local)
+        entry: ruff check --fix
+        language: system
+        types: [python]
+        stages: [pre-commit]
+      
+      - id: bandit
+        name: bandit (local)
+        entry: bash -lc 'bandit -c pyproject.toml -q -r .'
+        language: system
+        types: [python]
+        stages: [pre-push]
+  
+      - id: pip-audit
+        name: pip-audit (local)
+        entry: pip-audit
+        language: system
+        types: [python]
+        stages: [pre-push]
+      
+      - id: pytest
+        name: pytest (local)
+        entry: bash -lc 'pytest -q'
+        language: system
+        types: [python]
+        stages: [pre-push]

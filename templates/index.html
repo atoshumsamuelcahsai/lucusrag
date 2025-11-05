@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Code Query Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #query-input {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+        }
+        #response {
+            white-space: pre-wrap;
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Code Query Interface</h1>
+    <textarea id="query-input" placeholder="Enter your query here..."></textarea>
+    <button onclick="submitQuery()">Submit Query</button>
+    <div id="response"></div>
+
+    <script>
+        async function submitQuery() {
+            const query = document.getElementById('query-input').value;
+            const response = document.getElementById('response');
+            
+            try {
+                const result = await fetch('/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: query,
+                        ast_cache_dir: "./cache"
+                    }),
+                });
+                
+                const data = await result.json();
+                if (data.error) {
+                    response.innerHTML = `Error: ${data.error}`;
+                } else {
+                    response.innerHTML = data.response;
+                }
+            } catch (error) {
+                response.innerHTML = `Error: ${error}`;
+            }
+        }
+    </script>
+</body>
+</html> 
