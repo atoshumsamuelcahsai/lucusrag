@@ -16,12 +16,21 @@ repos:
         types: [python]
         stages: [pre-commit]
       
-      - id: bandit
-        name: bandit (local)
-        entry: bash -lc 'bandit -c pyproject.toml -q -r .'
+      - id: mypy
+        name: mypy (local)
+        entry: bash -lc 'mypy .'
         language: system
         types: [python]
         stages: [pre-push]
+
+      - id: bandit
+        name: bandit (local)
+        entry: bandit -c pyproject.toml -q -r .
+        language: system
+        types: [python]
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
   
       - id: pip-audit
         name: pip-audit (local)
