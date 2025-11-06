@@ -1,3 +1,3 @@
-from rag.schemas.code_element import CodeElement  # re-export
+from rag.schemas.code_element import CodeElement
 
 __all__ = ["CodeElement"]

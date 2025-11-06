@@ -239,13 +239,7 @@ lla_index*/
 llma_vector_store_data*/
 
 # AST analysis results
-james_ast/results*/
-tree-sitter-without-explanation/
-ast-without-explanation/
-
-# Output files
-output_json_files/
-token_distribution.png
+examples/
 
 # Additional secrets and config files
 secrets.json
