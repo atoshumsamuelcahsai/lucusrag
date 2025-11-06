@@ -1,0 +1,18 @@
+{
+  "type": "function",
+  "name": "get_embeddings",
+  "docstring": "Get embeddings model for the given provider name.",
+  "code": "def get_embeddings(provider: str = 'voyage') -> EmbeddingLike:\n    \"\"\"Get embeddings model for the given provider name.\"\"\"\n    api_key = os.getenv('VOYAGE_API_KEY')\n    if not api_key:\n        raise EnvironmentError('VOYAGE_API_KEY not found')\n    factory = _EMBEDDING_REGISTRY.get(provider)\n    if not factory:\n        valid = ', '.join(sorted(_EMBEDDING_REGISTRY.keys()))\n        raise ValueError(f\"Unknown provider '{provider}'. Valid: {valid}\")\n    return factory(api_key)",
+  "file_path": "rag/providers/embeddings.py",
+  "parameters": [{"name": "provider", "type": "str", "default": "voyage"}],
+  "return_type": "EmbeddingLike",
+  "decorators": [],
+  "dependencies": ["os", "EmbeddingLike"],
+  "base_classes": [],
+  "methods": [],
+  "calls": ["os.getenv", "EnvironmentError", "_EMBEDDING_REGISTRY.get", "ValueError"],
+  "assignments": [],
+  "explanation": "Factory function that retrieves an embedding provider from the registry",
+  "is_async": false
+}
+

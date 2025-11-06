@@ -7,4 +7,5 @@ black==25.1.0
 ruff==0.13.0
 typing==3.7.4.3
 types-aiofiles==25.1.0.20251011
+ pytest-asyncio==1.2.0
 

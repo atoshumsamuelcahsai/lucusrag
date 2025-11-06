@@ -31,7 +31,7 @@ class VectorIndexConfig:
         return cls(
             name=os.getenv("VECTOR_INDEX_NAME", "james_code_embeddings"),
             dimension=int(os.getenv("VECTOR_DIMENSION", "1536")),
-            node_label=os.getenv("NODE_LABEL", "JamesCodeElement"),
+            node_label=os.getenv("NODE_LABEL", "LucusCodeElement"),
             vector_property=os.getenv("VECTOR_PROPERTY", "embedding"),
             similarity_metric=os.getenv("SIMILARITY_METRIC", "cosine"),
             neo4j_url=os.getenv("NEO4J_URL", "bolt://localhost:7687"),
