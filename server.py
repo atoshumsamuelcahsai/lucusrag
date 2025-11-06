@@ -1,13 +1,12 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
 from pathlib import Path
 import logging
 
-from lucusrag.query_processor import process_query
+from rag.query_processor import process_query
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -17,9 +16,8 @@ app = FastAPI()
 # Get the current directory
 BASE_DIR = Path(__file__).resolve().parent
 
-# Set up templates and static files
+# Set up templates
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
 class Query(BaseModel):
@@ -34,7 +32,7 @@ class QueryRequest(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "text": "how do we handle zonecustome api",
+                "text": "How do we compute inverse matrics",
                 "ast_cache_dir": "./cache",
             }
         }
