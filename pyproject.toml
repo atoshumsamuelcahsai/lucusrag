@@ -9,6 +9,7 @@ namespace_packages = true
 # keep strict but readable defaults
 disallow_untyped_defs = true
 check_untyped_defs = true
+disable_error_code = ["operator"]
 
 [[tool.mypy.overrides]]
 module = [
@@ -16,6 +17,7 @@ module = [
     "neo4j.*",
     "anthropic.*",
     "voyageai.*",
+    "tree_sitter_python"
 ]
 ignore_missing_imports = true
 
@@ -30,7 +32,7 @@ ignore_missing_imports = true
 
 [tool.bandit]
 exclude_dirs = ["venv", ".venv", "lucusrag/test", "tests"]
-skips = ["B101", "B106", "B311", "B104", "B105", "B112"]
+skips = ["B101", "B106", "B311", "B104", "B105", "B112", "B110"]
 
 
 

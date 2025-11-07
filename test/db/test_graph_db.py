@@ -502,7 +502,8 @@ class TestGetVectorIndexConfig:
             "NEO4J_PASSWORD": "test_pass",
         },
     )
-    def test_get_vector_index_config_from_env(self):
+    @pytest.mark.asyncio
+    async def test_get_vector_index_config_from_env(self):
         """Test getting config from environment variables."""
         config = get_vector_index_config()
 

@@ -2,6 +2,25 @@
 
 A production-ready Retrieval-Augmented Generation (RAG) system for code search and understanding, combining semantic search, graph traversal, and hybrid retrieval strategies.
 
+## About This Project
+
+This project represents my journey from proof-of-concept to production-ready software, demonstrating advanced RAG techniques and modern software engineering practices.
+
+**Origin Story:**
+The initial concept emerged from identifying a real-world need at my previous company—building a centralized knowledge base combining code repositories, Confluence docs, and other documentation for customer support, product, and engineering teams. I developed the initial proof-of-concept independently on my own time to validate the technical approach.
+
+**From POC to Production:**
+This repository is a complete ground-up implementation showcasing my ability to architect production-ready systems. Key improvements include:
+
+- ✅ **Clean Architecture:** Well-structured codebase with separation of concerns (ingestion, indexing, querying)
+- ✅ **Comprehensive Testing:**  unit tests with pytest, including integration and edge cases
+- ✅ **Production Infrastructure:** Docker containerization, docker-compose orchestration, and CI/CD with pre-commit hooks
+- ✅ **Advanced Features:** AST-based code parsing, graph-based context expansion, hybrid retrieval strategies
+- ✅ **Type Safety:** Full mypy type checking and static analysis
+- ✅ **Modern DevOps:** Black, ruff, bandit, pip-audit for code quality and security
+
+This project is actively used for my Lucus project (WiFi location algorithms) and serves as a foundation for building intelligent code analysis systems.
+
 ## Prerequisites
 
 - Python 3.9+

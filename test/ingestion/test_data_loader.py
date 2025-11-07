@@ -96,7 +96,8 @@ class TestGetVectorIndexConfig:
             "NEO4J_PASSWORD": "test_pass",
         },
     )
-    def test_get_vector_index_config_from_env(self) -> None:
+    @pytest.mark.asyncio
+    async def test_get_vector_index_config_from_env(self) -> None:
         """Test getting config from environment variables."""
         config = get_vector_index_config()
 
@@ -258,7 +259,8 @@ class TestPopulateDatabase:
             sample_code_element, vector_config
         )
 
-    def test_populate_database_continues_on_node_error(
+    @pytest.mark.asyncio
+    async def test_populate_database_continues_on_node_error(
         self, mock_db_manager, vector_config, sample_code_element
     ):
         """Test that population continues when node creation fails."""
@@ -404,7 +406,8 @@ class TestProcessCodeFiles:
     @patch("rag.ingestion.data_loader._populate_database")
     @patch("rag.ingestion.data_loader.GraphDBManager")
     @patch("rag.ingestion.data_loader.get_vector_index_config")
-    def test_process_code_files_db_populated(
+    @pytest.mark.asyncio
+    async def test_process_code_files_db_populated(
         self,
         mock_get_config,
         mock_db_class,
