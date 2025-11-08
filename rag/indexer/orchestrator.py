@@ -16,7 +16,7 @@ from rag.indexer.vector_indexer import (
     get_vector_index,
     graph_configure_settings,
 )
-from rag.engine import make_query_engine
+from rag.engine.engine import make_query_engine
 from rag.schemas.vector_config import VectorIndexConfig
 
 import logging

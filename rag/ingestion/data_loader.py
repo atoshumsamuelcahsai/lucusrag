@@ -86,7 +86,7 @@ def _populate_database(
     logger.info("Phase 1: Creating nodes...")
     for code_info in code_infos:
         try:
-            db_manager.create_nodes(code_info, vector_config)
+            db_manager.create_node(code_info, vector_config)
         except Exception as e:
             logger.exception(f"Error creating nodes for {code_info.name}: {str(e)}")
             continue

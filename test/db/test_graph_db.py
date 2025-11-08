@@ -35,7 +35,7 @@ def vector_config():
 @pytest.fixture
 def code_element():
     """Fixture for CodeElement."""
-    return CodeElement(
+    element = CodeElement(
         type="function",
         name="test_function",
         docstring="Test function",
@@ -51,6 +51,7 @@ def code_element():
         assignments=None,
         explanation="Test explanation",
     )
+    return element
 
 
 @pytest.fixture
@@ -187,6 +188,14 @@ class TestGraphDBManagerSchema:
         mock_driver.session.return_value = mock_session
         mock_graph_db.driver.return_value = mock_driver
 
+        # Intercept execute_write and capture the transaction
+        tx = Mock()
+
+        def fake_execute_write(fn, *args, **kwargs):
+            return fn(tx)
+
+        mock_session.execute_write.side_effect = fake_execute_write
+
         manager = GraphDBManager(config=neo4j_config)
 
         # Mock _create_vector_index
@@ -197,8 +206,9 @@ class TestGraphDBManagerSchema:
         # Verify session was used
         mock_driver.session.assert_called_once()
 
-        # Verify statements were executed (5 statements: 1 constraint + 4 indexes)
-        assert mock_session.run.call_count == 5
+        # Now assert the number of schema statements executed inside the TX:
+        # 1 constraint + 2 indexes
+        assert tx.run.call_count == 3
 
         # Verify vector index creation was called
         manager._create_vector_index.assert_called_once()
@@ -228,7 +238,7 @@ class TestGraphDBManagerIndexOperations:
         mock_session.run.return_value.single.return_value = mock_record
 
         manager = GraphDBManager()
-        exists = manager._index_exist(mock_session, vector_config)
+        exists = manager._index_exists(mock_session, vector_config)
 
         assert exists is True
         mock_session.run.assert_called_once()
@@ -240,7 +250,7 @@ class TestGraphDBManagerIndexOperations:
         mock_session.run.return_value.single.return_value = mock_record
 
         manager = GraphDBManager()
-        exists = manager._index_exist(mock_session, vector_config)
+        exists = manager._index_exists(mock_session, vector_config)
 
         assert exists is False
 
@@ -273,18 +283,18 @@ class TestGraphDBManagerIndexOperations:
     def test_create_vector_index_new(self, mock_session, vector_config):
         """Test creating vector index when it doesn't exist."""
         manager = GraphDBManager()
-        manager._index_exist = Mock(return_value=False)
+        manager._index_exists = Mock(return_value=False)
         manager._create_index = Mock()
 
         manager._create_vector_index(mock_session, vector_config)
 
-        manager._index_exist.assert_called_once()
+        manager._index_exists.assert_called_once()
         manager._create_index.assert_called_once()
 
     def test_create_vector_index_exists_overwrite(self, mock_session, vector_config):
         """Test creating vector index when it exists and overwrite=True."""
         manager = GraphDBManager()
-        manager._index_exist = Mock(return_value=True)
+        manager._index_exists = Mock(return_value=True)
         manager._drop_index = Mock()
         manager._create_index = Mock()
 
@@ -296,7 +306,7 @@ class TestGraphDBManagerIndexOperations:
     def test_create_vector_index_exists_no_overwrite(self, mock_session, vector_config):
         """Test creating vector index when it exists and overwrite=False."""
         manager = GraphDBManager()
-        manager._index_exist = Mock(return_value=True)
+        manager._index_exists = Mock(return_value=True)
         manager._drop_index = Mock()
         manager._create_index = Mock()
 
@@ -310,73 +320,66 @@ class TestGraphDBManagerNodeOperations:
     """Tests for node operations."""
 
     @patch("rag.db.graph_db.GraphDatabase")
-    def test_create_nodes_success(
-        self,
-        mock_graph_db,
-        neo4j_config,
-        vector_config,
-        code_element,
-        mock_session,
-        mock_driver,
+    def test_create_node_success(
+        self, mock_graph_db, neo4j_config, vector_config, code_element
     ):
         """Test successful node creation."""
-        mock_driver.session.return_value = mock_session
+        mock_driver = Mock()
+        mock_session = Mock()
         mock_graph_db.driver.return_value = mock_driver
 
+        # Mock context manager for session
+        mock_driver.session.return_value.__enter__ = Mock(return_value=mock_session)
+        mock_driver.session.return_value.__exit__ = Mock(return_value=False)
+
+        # Mock transaction for execute_write
+        mock_tx = Mock()
+        mock_session.execute_write.side_effect = lambda fn: fn(mock_tx)
+
         manager = GraphDBManager(config=neo4j_config)
-        manager.create_nodes(code_element, vector_config)
 
+        # Reset any prior session() calls
+        mock_driver.session.reset_mock()
+
+        # Act
+        manager.create_node(code_element, vector_config)
+
+        # Assert
         mock_driver.session.assert_called_once()
-        mock_session.run.assert_called_once()
-
-        # Verify query contains MERGE
-        call_args = mock_session.run.call_args[0][0]
-        assert "MERGE" in call_args
-        assert vector_config.node_label in call_args
+        mock_session.execute_write.assert_called_once()
+        mock_tx.run.assert_called_once()
+        cypher = mock_tx.run.call_args[0][0]
+        assert "MERGE" in cypher
+        assert vector_config.node_label in cypher
 
     @patch("rag.db.graph_db.GraphDatabase")
-    def test_create_nodes_failure(
+    def test_create_node_failure(
         self,
         mock_graph_db,
         neo4j_config,
         vector_config,
         code_element,
-        mock_session,
-        mock_driver,
     ):
         """Test node creation failure."""
-        mock_driver.session.return_value = mock_session
+        mock_driver = Mock()
+        mock_session = Mock()
         mock_graph_db.driver.return_value = mock_driver
-        mock_session.run.side_effect = Exception("Node creation failed")
+
+        # Mock context manager for session
+        mock_driver.session.return_value.__enter__ = Mock(return_value=mock_session)
+        mock_driver.session.return_value.__exit__ = Mock(return_value=False)
+
+        # Mock execute_write to raise exception
+        mock_session.execute_write.side_effect = Exception("Node creation failed")
 
         manager = GraphDBManager(config=neo4j_config)
 
         with pytest.raises(Exception, match="Node creation failed"):
-            manager.create_nodes(code_element, vector_config)
+            manager.create_node(code_element, vector_config)
 
 
 class TestGraphDBManagerRelationshipOperations:
     """Tests for relationship operations."""
-
-    def test_add_classes(self, mock_session, vector_config):
-        """Test adding class-method relationships."""
-        code_element = CodeElement(
-            type="class",
-            name="TestClass",
-            docstring="",
-            code="",
-            file_path="/test.py",
-            methods=["method1", "method2"],
-        )
-
-        manager = GraphDBManager()
-        manager._add_classes(mock_session, vector_config, code_element, "test_id")
-
-        assert mock_session.run.call_count == 2
-
-        # Verify query contains HAS_METHOD
-        call_args = mock_session.run.call_args[0][0]
-        assert "HAS_METHOD" in call_args
 
     def test_add_inheritance(self, mock_session, vector_config):
         """Test adding inheritance relationships."""
@@ -389,14 +392,21 @@ class TestGraphDBManagerRelationshipOperations:
             base_classes=["BaseClass1", "BaseClass2"],
         )
 
+        # Mock transaction for execute_write
+        mock_tx = Mock()
+        mock_session.execute_write.side_effect = lambda fn: fn(mock_tx)
+
         manager = GraphDBManager()
-        manager._add_inheritance(mock_session, vector_config, code_element, "test_id")
+        manager._add_inheritance(mock_session, vector_config, code_element)
 
-        assert mock_session.run.call_count == 2
-
+        # Verify execute_write was called
+        mock_session.execute_write.assert_called_once()
         # Verify query contains INHERITS_FROM
-        call_args = mock_session.run.call_args[0][0]
-        assert "INHERITS_FROM" in call_args
+        cypher = mock_tx.run.call_args[0][0]
+        assert "INHERITS_FROM" in cypher
+        # Verify parameters
+        params = mock_tx.run.call_args[0][1]
+        assert params["bases"] == ["BaseClass1", "BaseClass2"]
 
     def test_add_calls(self, mock_session, vector_config):
         """Test adding function call relationships."""
@@ -409,14 +419,22 @@ class TestGraphDBManagerRelationshipOperations:
             calls=["module.function1", "function2"],
         )
 
+        # Mock transaction for execute_write
+        mock_tx = Mock()
+        mock_session.execute_write.side_effect = lambda fn: fn(mock_tx)
+
         manager = GraphDBManager()
-        manager._add_calls(mock_session, vector_config, code_element, "test_id")
+        manager._add_calls(mock_session, vector_config, code_element)
 
-        assert mock_session.run.call_count == 2
-
+        # Verify execute_write was called
+        mock_session.execute_write.assert_called_once()
         # Verify query contains CALLS
-        call_args = mock_session.run.call_args[0][0]
-        assert "CALLS" in call_args
+        cypher = mock_tx.run.call_args[0][0]
+        assert "CALLS" in cypher
+        # Verify parameters
+        params = mock_tx.run.call_args[0][1]
+        assert params["caller_id"] == code_element.id
+        assert params["calls"] == ["module.function1", "function2"]
 
     def test_add_dependencies(self, mock_session, vector_config):
         """Test adding dependency relationships."""
@@ -429,14 +447,22 @@ class TestGraphDBManagerRelationshipOperations:
             dependencies=["dep1.module", "dep2"],
         )
 
+        # Mock transaction for execute_write
+        mock_tx = Mock()
+        mock_session.execute_write.side_effect = lambda fn: fn(mock_tx)
+
         manager = GraphDBManager()
-        manager._add_dependencies(mock_session, vector_config, code_element, "test_id")
+        manager._add_dependencies(mock_session, vector_config, code_element)
 
-        assert mock_session.run.call_count == 2
-
+        # Verify execute_write was called
+        mock_session.execute_write.assert_called_once()
         # Verify query contains DEPENDS_ON
-        call_args = mock_session.run.call_args[0][0]
-        assert "DEPENDS_ON" in call_args
+        cypher = mock_tx.run.call_args[0][0]
+        assert "DEPENDS_ON" in cypher
+        # Verify parameters
+        params = mock_tx.run.call_args[0][1]
+        assert params["source_id"] == code_element.id
+        assert params["dependencies"] == ["dep1.module", "dep2"]
 
     @patch("rag.db.graph_db.GraphDatabase")
     def test_create_relationships_success(
@@ -449,21 +475,26 @@ class TestGraphDBManagerRelationshipOperations:
             docstring="",
             code="",
             file_path="/test.py",
-            methods=["method1"],
             base_classes=["BaseClass"],
             calls=["function"],
             dependencies=["module"],
         )
+        # Mock context manager for session
+        mock_driver.session.return_value.__enter__ = Mock(return_value=mock_session)
+        mock_driver.session.return_value.__exit__ = Mock(return_value=False)
 
-        mock_driver.session.return_value = mock_session
+        # Mock transaction for execute_write
+        mock_tx = Mock()
+        mock_session.execute_write.side_effect = lambda fn: fn(mock_tx)
+
         mock_graph_db.driver.return_value = mock_driver
 
         manager = GraphDBManager(config=neo4j_config)
         manager.create_relationships(code_element, vector_config)
 
         mock_driver.session.assert_called_once()
-        # Should call run for: methods, base_classes, calls, dependencies = 4 times
-        assert mock_session.run.call_count == 4
+        # Should call execute_write for: base_classes, calls, dependencies = 3 times
+        assert mock_session.execute_write.call_count == 3
 
     @patch("rag.db.graph_db.GraphDatabase")
     def test_create_relationships_failure(
@@ -476,9 +507,18 @@ class TestGraphDBManagerRelationshipOperations:
         mock_driver,
     ):
         """Test relationship creation failure."""
-        mock_driver.session.return_value = mock_session
+        code_element.base_classes = ["BaseClass"]
+
+        # Mock context manager for session
+        mock_driver.session.return_value.__enter__ = Mock(return_value=mock_session)
+        mock_driver.session.return_value.__exit__ = Mock(return_value=False)
+
+        # Mock execute_write to raise exception
+        mock_session.execute_write.side_effect = Exception(
+            "Relationship creation failed"
+        )
+
         mock_graph_db.driver.return_value = mock_driver
-        mock_session.run.side_effect = Exception("Relationship creation failed")
 
         manager = GraphDBManager(config=neo4j_config)
 
@@ -541,7 +581,7 @@ class TestGraphDBManagerIntegration:
         manager.create_schema(vector_config)
 
         # Create node
-        manager.create_nodes(code_element, vector_config)
+        manager.create_node(code_element, vector_config)
 
         # Create relationships (code_element has calls)
         if code_element.calls:

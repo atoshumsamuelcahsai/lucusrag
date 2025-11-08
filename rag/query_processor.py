@@ -8,7 +8,7 @@ from llama_index.core.query_engine import RetrieverQueryEngine
 from typing import Optional
 import typing as t
 
-from rag import engine
+from rag.engine import engine
 from rag.exceptions import QueryProcessingError
 from rag.ingestion.data_loader import get_vector_index_config
 

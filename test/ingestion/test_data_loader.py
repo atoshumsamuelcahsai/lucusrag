@@ -41,7 +41,7 @@ def mock_db_manager():
     manager.driver = MagicMock()
     manager.driver.session = MagicMock()
     manager.create_schema = Mock()
-    manager.create_nodes = Mock()
+    manager.create_node = Mock()
     manager.create_relationships = Mock()
     manager.close = Mock()
     return manager
@@ -240,7 +240,7 @@ class TestPopulateDatabase:
         _populate_database(mock_db_manager, [], vector_config)
 
         mock_db_manager.create_schema.assert_called_once()
-        mock_db_manager.create_nodes.assert_not_called()
+        mock_db_manager.create_node.assert_not_called()
         mock_db_manager.create_relationships.assert_not_called()
 
     def test_populate_database_with_code_elements(
@@ -252,7 +252,7 @@ class TestPopulateDatabase:
         _populate_database(mock_db_manager, code_infos, vector_config)
 
         mock_db_manager.create_schema.assert_called_once()
-        mock_db_manager.create_nodes.assert_called_once_with(
+        mock_db_manager.create_node.assert_called_once_with(
             sample_code_element, vector_config
         )
         mock_db_manager.create_relationships.assert_called_once_with(
@@ -274,12 +274,12 @@ class TestPopulateDatabase:
         code_infos = [sample_code_element, code_element2]
 
         # First call fails, second succeeds
-        mock_db_manager.create_nodes.side_effect = [Exception("Node error"), None]
+        mock_db_manager.create_node.side_effect = [Exception("Node error"), None]
 
         _populate_database(mock_db_manager, code_infos, vector_config)
 
         # Should attempt both
-        assert mock_db_manager.create_nodes.call_count == 2
+        assert mock_db_manager.create_node.call_count == 2
         # Should still try to create relationships for the second one
         assert mock_db_manager.create_relationships.call_count == 2
 
@@ -543,6 +543,6 @@ class TestProcessCodeFilesIntegration:
         # Verify
         assert len(result) == 1
         mock_db_manager.create_schema.assert_called_once()
-        mock_db_manager.create_nodes.assert_called_once()
+        mock_db_manager.create_node.assert_called_once()
         mock_db_manager.create_relationships.assert_called_once()
         mock_db_manager.close.assert_called_once()

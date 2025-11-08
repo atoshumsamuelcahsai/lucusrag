@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 import textwrap
 from rag.prompts import PROMPTS
+import uuid
 
 
 @dataclass
@@ -25,6 +26,12 @@ class CodeElement:
     assignments: List[str] = field(default_factory=list)
     explanation: str = ""
     is_async: bool = False
+
+    @property
+    def id(self) -> str:
+        """Generate a unique ID for the code element."""
+        _id = f"{self.type}:{self.name}:{self.file_path}"
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, _id))
 
     def format_parameters(self, params: List[dict]) -> Optional[str]:
         """Format parameters into a searchable string."""
@@ -60,6 +67,7 @@ class CodeElement:
         text_content = textwrap.dedent(text_content).strip()
 
         metadata = {
+            "id": self.id,
             "type": self.type,
             "name": self.name,
             "file_path": self.file_path,
@@ -73,6 +81,7 @@ class CodeElement:
             "methods": ",".join(self.methods) if self.methods else None,
             "assignments": ",".join(self.assignments) if self.assignments else None,
             "calls": ",".join(str(call) for call in self.calls) if self.calls else None,
+            "explanation": self.explanation if self.explanation else None,
         }
         metadata = {k: v for k, v in metadata.items() if v not in (None, "", [])}
 
@@ -81,6 +90,7 @@ class CodeElement:
     def to_dict(self) -> dict:
         """Convert CodeElement to a dictionary representation."""
         return {
+            "id": self.id,
             "type": self.type,
             "name": self.name,
             "docstring": self.docstring,
@@ -94,7 +104,7 @@ class CodeElement:
             "methods": list(self.methods) if self.methods else [],
             "calls": list(set(self.calls)) if self.calls else [],
             "assignments": list(set(self.assignments)) if self.assignments else [],
-            "explanation": self.explanation if self.explanation else "",
+            "explanation": self.explanation if self.explanation else None,
             "is_async": self.is_async,
         }
 

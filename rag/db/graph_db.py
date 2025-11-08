@@ -6,7 +6,7 @@ import time
 import typing as t
 
 from dotenv import load_dotenv
-from neo4j import Driver, GraphDatabase, Session
+from neo4j import Driver, GraphDatabase, ManagedTransaction, Session
 
 from rag.schemas import CodeElement
 from rag.schemas.vector_config import Neo4jConfig, VectorIndexConfig
@@ -67,48 +67,13 @@ class GraphDBManager:
             self._driver.close()
             self._driver = None
 
-    # ---------- Schema ----------
+    # Schema creation
     def create_schema(self, vector_config: VectorIndexConfig) -> None:
         """Create or verify Neo4j schema with indexes and constraints."""
         try:
             with self.driver.session() as session:
                 # Create base constraints and indexes
-                statements = [
-                    # Unique ID constraint
-                    f"""
-                    CREATE CONSTRAINT IF NOT EXISTS
-                    FOR (n:{vector_config.node_label}) REQUIRE n.id IS UNIQUE
-                    """,
-                    # Name index
-                    f"""
-                    CREATE INDEX IF NOT EXISTS
-                    FOR (n:{vector_config.node_label})
-                    ON (n.name)
-                    """,
-                    # Type index
-                    f"""
-                    CREATE INDEX IF NOT EXISTS
-                    FOR (n:{vector_config.node_label})
-                    ON (n.type)
-                    """,
-                    # Normalized path index
-                    f"""
-                    CREATE INDEX IF NOT EXISTS
-                    FOR (n:{vector_config.node_label})
-                    ON (n.normalized_path)
-                    """,
-                    # Qualified name index
-                    f"""
-                    CREATE INDEX IF NOT EXISTS
-                    FOR (n:{vector_config.node_label})
-                    ON (n.qualified_name)
-                    """,
-                ]
-
-                # Apply base constraints and indexes
-                for stmt in statements:
-                    session.run(stmt)
-
+                self._create_data_schema(session, vector_config)
                 self._create_vector_index(session, vector_config, overwrite=True)
                 logger.info(
                     f"Neo4j schema ensured for label {vector_config.node_label}"
@@ -117,7 +82,37 @@ class GraphDBManager:
             logger.exception(f"Failed to create schema: {str(e)}")
             raise
 
-    def _index_exist(self, session: Session, config: VectorIndexConfig) -> bool:
+    def _create_data_schema(
+        self, session: Session, vector_config: VectorIndexConfig
+    ) -> None:
+        statements = [
+            # Unique ID constraint
+            f"""
+                    CREATE CONSTRAINT IF NOT EXISTS
+                    FOR (n:{vector_config.node_label}) REQUIRE n.id IS UNIQUE
+                    """,
+            # Name index
+            f"""
+                    CREATE INDEX IF NOT EXISTS
+                    FOR (n:{vector_config.node_label})
+                    ON (n.name)
+                    """,
+            # Type index
+            f"""
+                    CREATE INDEX IF NOT EXISTS
+                    FOR (n:{vector_config.node_label})
+                    ON (n.type)
+                    """,
+        ]
+
+        def _run_schema(tx: ManagedTransaction) -> None:
+            for stmt in statements:
+                tx.run(stmt)
+
+        session.execute_write(_run_schema)
+        logger.info(f"Created data schema for label {vector_config.node_label}")
+
+    def _index_exists(self, session: Session, config: VectorIndexConfig) -> bool:
         # Check if index exists
         record = session.run(
             """
@@ -131,9 +126,7 @@ class GraphDBManager:
         return bool(record and record.get("exists", False))
 
     def _drop_index(self, session: Session, config: VectorIndexConfig) -> None:
-        # Neo4j doesn't parameterize identifiers in DROP INDEX;
-        # use f-string carefully
-        session.run(f"DROP INDEX {config.name} IF EXISTS")
+        session.run(f"DROP INDEX `{config.name}` IF EXISTS")
         logger.info(f"Dropped existing vector index {config.name}")
 
     def _create_index(self, session: Session, config: VectorIndexConfig) -> None:
@@ -159,7 +152,7 @@ class GraphDBManager:
         self, session: Session, config: VectorIndexConfig, overwrite: bool = True
     ) -> None:
         """Create or recreate a vector index with given configuration. This could be very expensive"""
-        exists = self._index_exist(session, config)
+        exists = self._index_exists(session, config)
 
         if exists:
             if overwrite:
@@ -171,127 +164,137 @@ class GraphDBManager:
             self._create_index(session, config)
 
     # ---------- Domain upserts ----------
-    def create_nodes(
-        self,
+    def create_node(
+        self: GraphDBManager,
         code_info: CodeElement,
         vector_config: VectorIndexConfig,
-        repo_name: str = "lucus",
     ) -> None:
-        """Create/update a code element node with a stable ID."""
-        try:
-            element_id = f"{code_info.file_path}:{code_info.type}:{code_info.name}"
-            with self.driver.session() as session:
-                session.run(
-                    f"""
-                    MERGE (n:{vector_config.node_label} {{id: $id}})
-                    SET n.name = $name,
-                        n.type = $type,
-                        n.file_path = $file_path,
-                        n.updated_at = timestamp(),
-                        n.qualified_name =
-                            CASE
-                                WHEN $file_path CONTAINS ('/' + $repo + '/')
-                                THEN replace(
-                                    substring(
-                                        $file_path,
-                                        size('/' + $repo + '/') + size(split($file_path, '/' + $repo + '/')[0]),
-                                        size($file_path) - 3
-                                    ),
-                                    '/',
-                                    '.'
-                                ) + '.' + $name
-                                ELSE $name
-                            END
-                    """,
-                    {
-                        "id": element_id,
-                        "name": code_info.name,
-                        "type": code_info.type,
-                        "file_path": code_info.file_path,
-                        "repo": repo_name,
-                    },
-                )
-            logger.debug("Upserted node for %s", code_info.name)
-        except Exception:
-            logger.exception("Failed to create node for %s", code_info.name)
-            raise
+        """Create or update a full CodeElement node with all metadata (except relationships)."""
+        label = vector_config.node_label
 
-    def _add_classes(
-        self,
-        session: Session,
-        vector_config: VectorIndexConfig,
-        code_info: CodeElement,
-        element_id: str,
-    ) -> None:
-        for method in code_info.methods or []:
-            method_id = f"{code_info.file_path}:function:{method}"
-            session.run(
+        def _upsert(tx: ManagedTransaction) -> None:
+            tx.run(
                 f"""
-                            MATCH (class:{vector_config.node_label} {{id: $class_id}})
-                            MATCH (method:{vector_config.node_label} {{id: $method_id}})
-                            MERGE (class)-[:HAS_METHOD {{context: 'Class method'}}]->(method)
-                        """,
-                {"class_id": element_id, "method_id": method_id},
+              MERGE (n:{label} {{ id: $id }})
+              SET n.name = $name,
+                  n.type = $type,
+                  n.file_path = $file_path,
+                  n.docstring = $docstring,
+                  n.code = $code,
+                  n.parameters = $parameters,
+                  n.return_type = $return_type,
+                  n.decorators = $decorators,
+                  n.base_classes = $base_classes,
+                  n.methods = $methods,
+                  n.assignments = $assignments,
+                  n.explanation = $explanation,
+                  n.is_async = $is_async,
+                  n.updated_at = timestamp()
+              """,
+                {
+                    "id": code_info.id,
+                    "name": code_info.name,
+                    "type": code_info.type,
+                    "file_path": code_info.file_path,
+                    "docstring": code_info.docstring,
+                    "code": code_info.code,
+                    "parameters": code_info.parameters,
+                    "return_type": code_info.return_type,
+                    "decorators": code_info.decorators,
+                    "base_classes": code_info.base_classes,
+                    "methods": code_info.methods,
+                    "assignments": code_info.assignments,
+                    "explanation": code_info.explanation or None,
+                    "is_async": code_info.is_async,
+                },
             )
+
+        try:
+            with self.driver.session() as session:
+                session.execute_write(_upsert)
+                logger.info(f"Upserted node for {code_info.name}")
+        except Exception:
+            logger.exception(f"Failed to create node for {code_info.name}")
+            raise
 
     def _add_inheritance(
         self,
         session: Session,
         vector_config: VectorIndexConfig,
         code_info: CodeElement,
-        element_id: str,
     ) -> None:
-        for base in code_info.base_classes or []:
-            session.run(
+        if not code_info.base_classes:
+            return
+
+        label = vector_config.node_label
+
+        def _link(tx: ManagedTransaction) -> None:
+            tx.run(
                 f"""
-                            MATCH (derived:{vector_config.node_label} {{id: $derived_id}})
-                            MATCH (base:{vector_config.node_label} {{name: $base_name}})
-                            MERGE (derived)-[:INHERITS_FROM {{context: 'Class inheritance'}}]->(base)
-                        """,
-                {"derived_id": element_id, "base_name": base},
+                MATCH (derived:{label} {{ id: $derived_id }})
+                UNWIND $bases AS base_name
+                MATCH (base:{label} {{ name: base_name }})
+                MERGE (derived)-[:INHERITS_FROM {{context: 'Class inheritance'}}]->(base)
+                """,
+                {
+                    "derived_id": code_info.id,
+                    "bases": code_info.base_classes,
+                },
             )
 
+        session.execute_write(_link)
+
     def _add_calls(
-        self,
-        session: Session,
-        vector_config: VectorIndexConfig,
-        code_info: CodeElement,
-        element_id: str,
+        self, session: Session, vector_config: VectorIndexConfig, code_info: CodeElement
     ) -> None:
-        for call in code_info.calls or []:
-            call_name = call.split(".")[-1]
-            session.run(
+        if not code_info.calls:
+            return
+        label = vector_config.node_label
+
+        def _link(tx: ManagedTransaction) -> None:
+            tx.run(
                 f"""
-                            MATCH (caller:{vector_config.node_label} {{id: $caller_id}})
-                            MATCH (called:{vector_config.node_label} {{name: $call_name}})
-                            MERGE (caller)-[:CALLS {{
-                                context: 'Function call',
-                                call_signature: $full_call
-                            }}]->(called)
-                        """,
-                {"caller_id": element_id, "call_name": call_name, "full_call": call},
+                MATCH (caller:{label} {{ id: $caller_id }})
+                UNWIND $calls AS callee_name          // full FQN, no split
+                MATCH (called:{label} {{ name: callee_name }})
+                MERGE (caller)-[:CALLS {{
+                    context: 'Function call',
+                    call_signature: callee_name
+                }}]->(called)
+                """,
+                {"caller_id": code_info.id, "calls": code_info.calls},
             )
+
+        session.execute_write(_link)
 
     def _add_dependencies(
         self,
         session: Session,
         vector_config: VectorIndexConfig,
         code_info: CodeElement,
-        element_id: str,
     ) -> None:
-        for dep in code_info.dependencies or []:
-            dep_name = dep.split(".")[-1]
-            session.run(
+        if not code_info.dependencies:
+            return
+        label = vector_config.node_label
+
+        def _link(tx: ManagedTransaction) -> None:
+            tx.run(
                 f"""
-                            MATCH (source:{vector_config.node_label} {{id: $source_id}})
-                            MATCH (dep:{vector_config.node_label} {{name: $dep_name}})
-                            MERGE (source)-[:DEPENDS_ON {{
-                                context: 'Module dependency',
-                                import_path: $full_dep
-                            }}]->(dep)
-                        """,
-                {"source_id": element_id, "dep_name": dep_name, "full_dep": dep},
+                MATCH (source:{label} {{ id: $source_id }})
+                UNWIND $dependencies AS dep_name
+                MATCH (dep:{label} {{ name: dep_name }})
+                MERGE (source)-[:DEPENDS_ON {{
+                    context: 'Module dependency',
+                    import_path: dep_name
+                }}]->(dep)
+                """,
+                {
+                    "source_id": code_info.id,
+                    "dependencies": code_info.dependencies,
+                },
             )
+
+        session.execute_write(_link)
 
     def create_relationships(
         self, code_info: CodeElement, vector_config: VectorIndexConfig
@@ -299,25 +302,17 @@ class GraphDBManager:
         """Create relationships between nodes."""
         try:
             with self.driver.session() as session:
-                element_id = f"{code_info.file_path}:{code_info.type}:{code_info.name}"
-
-                # 1. Add class methods
-                if code_info.type == "class" and code_info.methods:
-                    self._add_classes(session, vector_config, code_info, element_id)
-
-                # 2. Add inheritance
+                # 1. Add inheritance
                 if code_info.base_classes:  # Direct attribute access
-                    self._add_inheritance(session, vector_config, code_info, element_id)
+                    self._add_inheritance(session, vector_config, code_info)
 
-                # 3. Add calls
+                # 2. Add calls
                 if code_info.calls:  # Direct attribute access
-                    self._add_calls(session, vector_config, code_info, element_id)
+                    self._add_calls(session, vector_config, code_info)
 
-                # 4. Add dependencies
+                # 3. Add dependencies
                 if code_info.dependencies:  # Direct attribute access
-                    self._add_dependencies(
-                        session, vector_config, code_info, element_id
-                    )
+                    self._add_dependencies(session, vector_config, code_info)
 
             logger.info(f"Added relationships for {code_info.name}")
 
