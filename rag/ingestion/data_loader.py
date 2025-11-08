@@ -74,7 +74,7 @@ def _create_schema(
     db_manager.create_schema(vector_config)
 
 
-def _populate_database(
+def _build_code_db_graph(
     db_manager: GraphDBManager,
     code_infos: t.List[CodeElement],
     vector_config: VectorIndexConfig,
@@ -166,7 +166,7 @@ def process_code_files(
                 f"Populating Neo4j with new code elements "
                 f"(label={vector_config.node_label})..."
             )
-            _populate_database(db_manager, code_infos, vector_config)
+            _build_code_db_graph(db_manager, code_infos, vector_config)
         else:
             logger.info("Using existing database")
 

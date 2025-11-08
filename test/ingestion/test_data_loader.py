@@ -10,7 +10,7 @@ from rag.ingestion.data_loader import (
     get_vector_index_config,
     _process_ast_files,
     _create_schema,
-    _populate_database,
+    _build_code_db_graph,
     _check_db_populated,
     process_code_files,
 )
@@ -232,24 +232,24 @@ class TestCreateSchema:
             _create_schema(mock_db_manager, vector_config)
 
 
-class TestPopulateDatabase:
-    """Tests for _populate_database function."""
+class TestBuildCodeDBGraph:
+    """Tests for _build_code_db_graph function."""
 
-    def test_populate_database_empty_list(self, mock_db_manager, vector_config):
-        """Test populating database with empty list."""
-        _populate_database(mock_db_manager, [], vector_config)
+    def test_build_code_db_graph_empty_list(self, mock_db_manager, vector_config):
+        """Test building database graph with empty list."""
+        _build_code_db_graph(mock_db_manager, [], vector_config)
 
         mock_db_manager.create_schema.assert_called_once()
         mock_db_manager.create_node.assert_not_called()
         mock_db_manager.create_relationships.assert_not_called()
 
-    def test_populate_database_with_code_elements(
+    def test_build_code_db_graph_with_code_elements(
         self, mock_db_manager, vector_config, sample_code_element
     ):
-        """Test populating database with code elements."""
+        """Test building database graph with code elements."""
         code_infos = [sample_code_element]
 
-        _populate_database(mock_db_manager, code_infos, vector_config)
+        _build_code_db_graph(mock_db_manager, code_infos, vector_config)
 
         mock_db_manager.create_schema.assert_called_once()
         mock_db_manager.create_node.assert_called_once_with(
@@ -260,41 +260,41 @@ class TestPopulateDatabase:
         )
 
     @pytest.mark.asyncio
-    async def test_populate_database_continues_on_node_error(
+    async def test_build_code_db_graph_continues_on_node_error(
         self, mock_db_manager, vector_config, sample_code_element
     ):
-        """Test that population continues when node creation fails."""
-        code_element2 = CodeElement(
+        """Test that building continues when node creation fails."""
+        code_element = CodeElement(
             type="class",
             name="TestClass",
             docstring="Test",
             code="class TestClass: pass",
             file_path="/test.py",
         )
-        code_infos = [sample_code_element, code_element2]
+        code_infos = [sample_code_element, code_element]
 
         # First call fails, second succeeds
         mock_db_manager.create_node.side_effect = [Exception("Node error"), None]
 
-        _populate_database(mock_db_manager, code_infos, vector_config)
+        _build_code_db_graph(mock_db_manager, code_infos, vector_config)
 
         # Should attempt both
         assert mock_db_manager.create_node.call_count == 2
         # Should still try to create relationships for the second one
         assert mock_db_manager.create_relationships.call_count == 2
 
-    def test_populate_database_continues_on_relationship_error(
+    def test_build_code_db_graph_continues_on_relationship_error(
         self, mock_db_manager, vector_config, sample_code_element
     ):
-        """Test that population continues when relationship creation fails."""
-        code_element2 = CodeElement(
+        """Test that build database graph continues when relationship creation fails."""
+        code_element = CodeElement(
             type="class",
             name="TestClass",
             docstring="Test",
             code="class TestClass: pass",
             file_path="/test.py",
         )
-        code_infos = [sample_code_element, code_element2]
+        code_infos = [sample_code_element, code_element]
 
         # First relationship fails, second succeeds
         mock_db_manager.create_relationships.side_effect = [
@@ -302,16 +302,16 @@ class TestPopulateDatabase:
             None,
         ]
 
-        _populate_database(mock_db_manager, code_infos, vector_config)
+        _build_code_db_graph(mock_db_manager, code_infos, vector_config)
 
         assert mock_db_manager.create_relationships.call_count == 2
 
 
-class TestCheckDBPopulated:
-    """Tests for _check_db_populated function."""
+class TestCheckDBBuilt:
+    """Tests for _check_db_populated function (checks if graph is built)."""
 
-    def test_check_db_populated_true(self, mock_db_manager, vector_config):
-        """Test checking populated database."""
+    def test_check_db_built_true(self, mock_db_manager, vector_config):
+        """Test checking if database graph is built."""
         mock_session = MagicMock()
         mock_record = MagicMock()
         mock_record.get.return_value = True
@@ -325,8 +325,8 @@ class TestCheckDBPopulated:
         assert result is True
         mock_session.run.assert_called_once()
 
-    def test_check_db_populated_false(self, mock_db_manager, vector_config):
-        """Test checking empty database."""
+    def test_check_db_built_false(self, mock_db_manager, vector_config):
+        """Test checking if database graph is not built (empty)."""
         mock_session = MagicMock()
         mock_record = MagicMock()
         mock_record.get.return_value = False
@@ -339,7 +339,7 @@ class TestCheckDBPopulated:
 
         assert result is False
 
-    def test_check_db_populated_error(self, mock_db_manager, vector_config):
+    def test_check_db_built_error(self, mock_db_manager, vector_config):
         """Test error handling when checking database."""
         mock_session = MagicMock()
         mock_session.run.side_effect = Exception("Connection error")
@@ -371,7 +371,7 @@ class TestProcessCodeFiles:
 
     @patch("rag.ingestion.data_loader._check_db_populated")
     @patch("rag.ingestion.data_loader._process_ast_files")
-    @patch("rag.ingestion.data_loader._populate_database")
+    @patch("rag.ingestion.data_loader._build_code_db_graph")
     @patch("rag.ingestion.data_loader.GraphDBManager")
     @patch("rag.ingestion.data_loader.get_vector_index_config")
     def test_process_code_files_db_empty(
@@ -385,11 +385,11 @@ class TestProcessCodeFiles:
         vector_config,
         sample_code_element,
     ):
-        """Test processing when database is empty (should populate)."""
+        """Test processing when database is empty (should build graph)."""
         mock_get_config.return_value = vector_config
         mock_db_manager = MagicMock()
         mock_db_class.return_value = mock_db_manager
-        mock_check_db.return_value = False  # DB is empty
+        mock_check_db.return_value = False  # DB graph not built
 
         mock_doc = Document(page_content="test", metadata={})
         mock_process_files.return_value = ([mock_doc], [sample_code_element])
@@ -403,11 +403,11 @@ class TestProcessCodeFiles:
 
     @patch("rag.ingestion.data_loader._check_db_populated")
     @patch("rag.ingestion.data_loader._process_ast_files")
-    @patch("rag.ingestion.data_loader._populate_database")
+    @patch("rag.ingestion.data_loader._build_code_db_graph")
     @patch("rag.ingestion.data_loader.GraphDBManager")
     @patch("rag.ingestion.data_loader.get_vector_index_config")
     @pytest.mark.asyncio
-    async def test_process_code_files_db_populated(
+    async def test_process_code_files_db_built(
         self,
         mock_get_config,
         mock_db_class,
@@ -418,11 +418,11 @@ class TestProcessCodeFiles:
         vector_config,
         sample_code_element,
     ):
-        """Test processing when database is already populated (should skip)."""
+        """Test processing when database graph is already built (should skip)."""
         mock_get_config.return_value = vector_config
         mock_db_manager = MagicMock()
         mock_db_class.return_value = mock_db_manager
-        mock_check_db.return_value = True  # DB is populated
+        mock_check_db.return_value = True  # DB graph is built
 
         mock_doc = Document(page_content="test", metadata={})
         mock_process_files.return_value = ([mock_doc], [sample_code_element])
@@ -431,7 +431,7 @@ class TestProcessCodeFiles:
 
         assert len(result) == 1
         mock_check_db.assert_called_once()
-        mock_populate.assert_not_called()  # Should not populate
+        mock_populate.assert_not_called()  # Should not build graph
         mock_db_manager.close.assert_called_once()
 
     @patch("rag.ingestion.data_loader._check_db_populated")
