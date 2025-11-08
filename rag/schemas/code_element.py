@@ -3,6 +3,7 @@ from llama_index.core.schema import TextNode
 from dataclasses import dataclass, field
 from typing import List, Optional
 import textwrap
+from rag.prompts import PROMPTS
 
 
 @dataclass
@@ -102,7 +103,7 @@ class CodeElement:
         """Create CodeElement from dictionary."""
         return cls(**data)
 
-    def generate_explanation(self, llm_provider: str = "anthropic") -> None:
+    async def generate_explanation(self, llm_provider: str = "anthropic") -> None:
         """Generate AI explanation using configured LLM provider.
 
         Args:
@@ -114,27 +115,16 @@ class CodeElement:
 
             llm = get_llm(llm_provider)
 
-            prompt = f"""Analyze this Python code and explain how it works step by step:
-
-Type: {self.type}
-Name: {self.name}
-
-Code:
-```python
-{self.code}
-```
-
-Context:
-Docstring: {self.docstring}
-Parameters: {self.parameters}
-Return Type: {self.return_type}
-
-Provide a practical explanation that helps developers understand and use this code.
-Focus on:
-1. Purpose (1-2 sentences)
-2. Step-by-step implementation
-3. Usage example (if applicable)
-4. Important notes (edge cases, performance)"""
+            prompt = await PROMPTS.render(
+                "code_explain_factual",
+                type=self.type,
+                name=self.name,
+                file_path=self.file_path,
+                code=self.code,
+                parameters=self.format_parameters(self.parameters),
+                return_type=self.return_type,
+                docstring=self.docstring,
+            )
 
             # Use the LLM provider's complete method
             response = llm.complete(prompt)

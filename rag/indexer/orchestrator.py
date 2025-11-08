@@ -1,4 +1,3 @@
-# orchestrator.py
 from __future__ import annotations
 from enum import Enum
 import json
@@ -82,7 +81,8 @@ class CodeGraphIndexer:
         t0 = time.perf_counter()
 
         # global Settings.llm, embed_model, parser
-        await self._ensure_settings_once()
+        await self._get_graph_config()
+
         # VectorIndexConfig.from env
         config = get_vector_index_config()
 
@@ -159,7 +159,7 @@ class CodeGraphIndexer:
         resp = self._engine.query(text)
         return str(resp)
 
-    async def _ensure_settings_once(self) -> None:
+    async def _get_graph_config(self) -> None:
         await graph_configure_settings()
 
     async def _snapshot_files(self) -> Dict[str, Dict[str, Any]]:

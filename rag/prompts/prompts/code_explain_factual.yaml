@@ -1,0 +1,54 @@
+id: code_explain_factual
+meta:
+  task: code_explanation
+  target: factual_explanation_boost_semantic_search
+  version: "1"
+template: |
+  You are analyzing a Python {{ type }} to generate a searchable explanation.
+  
+  **Code Element:**
+  - Type: {{ type }}
+  - Name: {{ name }}
+  - File: {{ file_path }}
+  {% if parameters %}- Parameters: {{ parameters }}{% endif %}
+  {% if return_type %}- Returns: {{ return_type }}{% endif %}
+  {% if docstring %}- Docstring: {{ docstring }}{% endif %}
+  
+  **Code:**
+  ```python
+  {{ code }}
+  ```
+  
+  **Your Task:**
+  Generate a factual explanation optimized for semantic search. Write as if answering:
+  "What does this do, how does it work, and when would I use it?" Do not infer behavior beyond what is visible in the code.
+  
+  **Required Structure:**
+  1. **Purpose** (1-2 sentences): What this code does and its role in the system.
+  2. **How It Works** (2-3 sentences): Key logic, data flow, or algorithm.
+  3. **Key Details** (bullet points): Important behaviors, validations, edge cases, or performance notes.
+  4. **Usage** (1 example): Short code snippet showing practical use.
+  
+  **Guidelines:**
+  - Base explanation strictly on visible code—no speculation
+  - Use terminology developers would search for
+  - Keep concise: 50-100 words for functions, 100-150 for classes
+  - Focus on searchable, factual information
+  - Avoid implementation details not present in the code
+  
+  **Example Output Format:**
+  
+  **Purpose:** Validates user input and creates a User object.
+  
+  **How It Works:** Takes a dictionary of user data, checks required fields (name, email), validates email format using regex, then constructs and returns a User instance.
+  
+  **Key Details:**
+  - Raises ValueError if required fields missing or email invalid
+  - Email validation uses standard RFC 5322 pattern
+  - No database interaction—returns in-memory object
+  
+  **Usage:**
+  ```python
+  user = create_user({"name": "Alice", "email": "alice@example.com"})
+  ```
+  

@@ -1,0 +1,16 @@
+id: code_explain_step
+meta:
+  task: code_explanation
+  target: factual_explanation_boost_sematic_search
+  version: "1"
+template: |
+  You are given a Python code snippet. Analyze it **strictly based on the provided content** — 
+  do not infer missing context or external behavior.
+
+  Type: {{ type }}
+  Name: {{ name }}
+
+  Code:
+  ```python
+  {{ code }}
+

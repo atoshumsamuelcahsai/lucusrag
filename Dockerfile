@@ -10,13 +10,22 @@ RUN apt-get update && \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Create a non-root user
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
 
-COPY requirments.txt requirments-dev.txt ./
+# Add local bin to PATH for pip-installed scripts
+ENV PATH="/home/appuser/.local/bin:${PATH}"
+
+# Switch to non-root user
+USER appuser
+
+COPY requirements.txt requirements-dev.txt ./
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --index-url https://pypi.org/simple --no-cache-dir -r requirments.txt && \
-    pip install --index-url https://pypi.org/simple --no-cache-dir -r requirments-dev.txt
+    pip install --index-url https://pypi.org/simple --no-cache-dir -r requirements.txt && \
+    pip install --index-url https://pypi.org/simple --no-cache-dir -r requirements-dev.txt
 
 # Copy application code
 COPY rag/ ./rag/
@@ -26,6 +35,11 @@ COPY run_server.py ./
 COPY templates/ ./templates/
 COPY pyproject.toml ./
 COPY .pre-commit-config.yaml ./
+
+# Change ownership of all copied files to appuser
+USER root
+RUN chown -R appuser:appuser /app
+USER appuser
 
 # Expose port for FastAPI
 EXPOSE 8000

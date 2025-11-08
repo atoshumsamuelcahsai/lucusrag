@@ -10,3 +10,4 @@ types-aiofiles==25.1.0.20251011
 pytest-asyncio==1.2.0
 jupyter>=1.1.1
 ipykernel>=6.29.5
+types-PyYAML==6.0.12.20250915

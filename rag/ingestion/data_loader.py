@@ -90,6 +90,7 @@ def _populate_database(
         except Exception as e:
             logger.exception(f"Error creating nodes for {code_info.name}: {str(e)}")
             continue
+
     logger.info("\nPhase 2: Creating relationships...")
     for code_info in code_infos:
         try:
@@ -126,7 +127,7 @@ def process_code_files(
     vector_config: t.Optional[VectorIndexConfig] = None,
 ) -> t.List[Document]:
     """
-    Load AST-derived JSON files, optionally populate Neo4j, and return documents.
+    Load AST-derived JSON files, optionally populate Neo4j, and return documents (llama_index.Document).
 
     Behaviour:
       • Validates the AST cache directory exists.

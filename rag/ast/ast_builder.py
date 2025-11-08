@@ -5,6 +5,7 @@ import logging
 
 from rag.schemas.processed_files_tracker import ProgressState
 from rag.ast.builders import CodeParser, ASTParser, TreeSitterParser
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ def build_tree_python_files(
             try:
                 # Only generate explanation if flag is True
                 if generate_explanations:
-                    element.generate_explanation(llm_provider)
+                    asyncio.run(element.generate_explanation(llm_provider))
 
                 # Save CodeElement
                 element_file = results_dir / f"{element_id.replace('/', '_')}.json"
