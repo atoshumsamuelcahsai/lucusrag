@@ -62,10 +62,11 @@ def _make_voyage_lite(api_key: str) -> EmbeddingLike:
 
 def get_embeddings(provider: str = "voyage") -> EmbeddingLike:
     """Get embeddings model for the given provider name."""
-    api_key = os.getenv("VOYAGE_API_KEY")
+    upper_provider = provider.upper()
+    api_key = os.getenv(f"{upper_provider}_API_KEY")
     if not api_key:
         raise EnvironmentError(
-            "VOYAGE_API_KEY not found in environment variables. "
+            f"{upper_provider}_API_KEY not found in environment variables. "
             "Please set it in your .env file or environment."
         )
 

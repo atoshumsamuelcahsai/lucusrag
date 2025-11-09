@@ -5,11 +5,10 @@ Tests for the vector_indexer module.
 import pytest
 import asyncio
 from unittest.mock import Mock, patch
-from llama_index.core import Settings, Document
+from llama_index.core import Settings
 from rag.indexer.vector_indexer import (
     graph_configure_settings,
-    get_vector_index,
-    get_vector_store_index,
+    create_vector_index_from_existing_nodes,
 )
 import rag.indexer.vector_indexer as vi
 from rag.schemas.vector_config import VectorIndexConfig
@@ -27,9 +26,9 @@ class TestGraphConfigureSettings:
 
         vi._settings_configured = False
 
-        with patch(
-            "rag.indexer.vector_indexer.embeddings.get_embeddings"
-        ) as mock_embed, patch("rag.indexer.vector_indexer.get_llm") as mock_llm:
+        with patch("rag.indexer.vector_indexer.get_embeddings") as mock_embed, patch(
+            "rag.indexer.vector_indexer.get_llm"
+        ) as mock_llm:
 
             mock_embed.return_value = Mock()
             mock_llm.return_value = Mock()
@@ -58,9 +57,9 @@ class TestGraphConfigureSettings:
 
         vi._settings_configured = True  # Already configured
 
-        with patch(
-            "rag.indexer.vector_indexer.embeddings.get_embeddings"
-        ) as mock_embed, patch("rag.indexer.vector_indexer.get_llm") as mock_llm:
+        with patch("rag.indexer.vector_indexer.get_embeddings") as mock_embed, patch(
+            "rag.indexer.vector_indexer.get_llm"
+        ) as mock_llm:
 
             await graph_configure_settings()
 
@@ -81,9 +80,9 @@ class TestGraphConfigureSettings:
             call_count += 1
             await asyncio.sleep(0.01)  # Simulate async work
 
-        with patch(
-            "rag.indexer.vector_indexer.embeddings.get_embeddings"
-        ) as mock_embed, patch("rag.indexer.vector_indexer.get_llm") as mock_llm:
+        with patch("rag.indexer.vector_indexer.get_embeddings") as mock_embed, patch(
+            "rag.indexer.vector_indexer.get_llm"
+        ) as mock_llm:
 
             mock_embed.return_value = Mock()
             mock_llm.return_value = Mock()
@@ -99,45 +98,11 @@ class TestGraphConfigureSettings:
             assert mock_llm.call_count == 1
 
 
-class TestGetVectorIndex:
-    """Test suite for get_vector_index function."""
+class TestCreateVectorIndexFromExistingNodes:
+    """Test suite for create_vector_index_from_existing_nodes function."""
 
-    def test_get_vector_index_with_empty_documents(self):
-        """Test that empty documents produce a warning."""
-
-        config = VectorIndexConfig(
-            name="test_index",
-            dimension=1536,
-            node_label="TestNode",
-            vector_property="embedding",
-            similarity_metric="cosine",
-            neo4j_url="bolt://localhost:7687",
-            neo4j_user="neo4j",
-            neo4j_password="password",
-        )
-
-        with patch(
-            "rag.indexer.vector_indexer._graph_configure_settings_blocking"
-        ), patch("rag.indexer.vector_indexer.Neo4jVectorStore"), patch(
-            "rag.indexer.vector_indexer.Neo4jGraphStore"
-        ), patch(
-            "rag.indexer.vector_indexer.VectorStoreIndex.from_documents"
-        ) as mock_index, patch(
-            "rag.indexer.vector_indexer.logger"
-        ) as mock_logger:
-
-            mock_index.return_value = Mock()
-
-            get_vector_index([], config)
-
-            # Should log warning about empty documents
-            mock_logger.warning.assert_called_once()
-            assert "empty documents" in str(mock_logger.warning.call_args).lower()
-
-    def test_get_vector_index_loads_config_from_env(self):
+    def test_create_vector_index_loads_config_from_env(self):
         """Test that config is loaded from env if not provided."""
-        documents = [Document(text="test doc", metadata={"id": "1"})]
-
         with patch(
             "rag.indexer.vector_indexer._graph_configure_settings_blocking"
         ), patch(
@@ -147,10 +112,8 @@ class TestGetVectorIndex:
         ), patch(
             "rag.indexer.vector_indexer.Neo4jGraphStore"
         ), patch(
-            "rag.indexer.vector_indexer.VectorStoreIndex.from_documents"
-        ) as mock_index, patch(
-            "rag.indexer.vector_indexer.logger"
-        ):
+            "rag.indexer.vector_indexer.VectorStoreIndex.from_vector_store"
+        ) as mock_index:
 
             mock_config = Mock()
             mock_config.neo4j_url = "bolt://localhost:7687"
@@ -165,16 +128,13 @@ class TestGetVectorIndex:
             mock_from_env.return_value = mock_config
             mock_index.return_value = Mock()
 
-            get_vector_index(documents, vector_config=None)
+            create_vector_index_from_existing_nodes(vector_config=None)
 
             # Should call from_env when config is None
             mock_from_env.assert_called_once()
 
-    def test_get_vector_index_creates_stores(self):
+    def test_create_vector_index_creates_stores(self):
         """Test that vector and graph stores are created correctly."""
-        from rag.schemas.vector_config import VectorIndexConfig
-
-        documents = [Document(text="test", metadata={"id": "1"})]
         config = VectorIndexConfig(
             name="test_index",
             dimension=1536,
@@ -191,12 +151,12 @@ class TestGetVectorIndex:
         ), patch("rag.indexer.vector_indexer.Neo4jVectorStore") as mock_vector, patch(
             "rag.indexer.vector_indexer.Neo4jGraphStore"
         ) as mock_graph, patch(
-            "rag.indexer.vector_indexer.VectorStoreIndex.from_documents"
+            "rag.indexer.vector_indexer.VectorStoreIndex.from_vector_store"
         ) as mock_index:
 
             mock_index.return_value = Mock()
 
-            get_vector_index(documents, config)
+            create_vector_index_from_existing_nodes(config)
 
             # Verify Neo4jVectorStore was created with correct params
             mock_vector.assert_called_once()
@@ -211,73 +171,15 @@ class TestGetVectorIndex:
             mock_graph.assert_called_once()
             graph_kwargs = mock_graph.call_args.kwargs
             assert graph_kwargs["url"] == "bolt://test:7687"
-            assert "HAS_METHOD" in graph_kwargs["edge_labels"]
+            assert "INHERITS_FROM" in graph_kwargs["edge_labels"]
             assert "CALLS" in graph_kwargs["edge_labels"]
+            assert "DEPENDS_ON" in graph_kwargs["edge_labels"]
 
-    def test_get_vector_index_uses_custom_parser(self):
-        """Test that custom parser is used in transformations."""
-        from rag.schemas.vector_config import VectorIndexConfig
-
-        documents = [Document(text="test", metadata={"id": "1"})]
-        config = VectorIndexConfig(
-            name="test_index",
-            dimension=1536,
-            node_label="TestNode",
-            vector_property="embedding",
-            similarity_metric="cosine",
-            neo4j_url="bolt://localhost:7687",
-            neo4j_user="neo4j",
-            neo4j_password="password",
-        )
-
-        with patch(
-            "rag.indexer.vector_indexer._graph_configure_settings_blocking"
-        ), patch("rag.indexer.vector_indexer.Neo4jVectorStore"), patch(
-            "rag.indexer.vector_indexer.Neo4jGraphStore"
-        ), patch(
-            "rag.indexer.vector_indexer.VectorStoreIndex.from_documents"
-        ) as mock_index:
-
-            mock_index.return_value = Mock()
-
-            get_vector_index(documents, config)
-
-            # Verify transformations include node parser
-            call_kwargs = mock_index.call_args.kwargs
-            assert "transformations" in call_kwargs
-            assert Settings.node_parser in call_kwargs["transformations"]
-
-
-class TestGetVectorStoreIndex:
-    """Test suite for get_vector_store_index function."""
-
-    def test_get_vector_store_index_integration(self):
-        """Test get_vector_store_index calls correct functions."""
-        with patch(
-            "rag.indexer.vector_indexer.process_code_files"
-        ) as mock_process, patch(
-            "rag.indexer.vector_indexer.get_vector_index_config"
-        ) as mock_config, patch(
-            "rag.indexer.vector_indexer.get_vector_index"
-        ) as mock_get_index:
-
-            mock_documents = [Document(text="test", metadata={"id": "1"})]
-            mock_process.return_value = mock_documents
-
-            mock_cfg = Mock()
-            mock_config.return_value = mock_cfg
-
-            mock_index = Mock()
-            mock_get_index.return_value = mock_index
-
-            result = get_vector_store_index("test/ast/dir")
-
-            # Verify correct function calls
-            mock_process.assert_called_once_with("test/ast/dir")
-            mock_config.assert_called_once()
-            mock_get_index.assert_called_once_with(mock_documents, mock_cfg)
-
-            assert result == mock_index
+            # Verify VectorStoreIndex.from_vector_store was called
+            mock_index.assert_called_once()
+            index_call_args = mock_index.call_args.kwargs
+            assert "vector_store" in index_call_args
+            assert "graph_store" in index_call_args
 
 
 class TestBlockingConfigureSettings:
@@ -333,9 +235,9 @@ def test_full_vector_index_creation():
 
     Run with: pytest -v -s test/indexer/test_vector_indexer.py -k full_vector
     """
-    from rag.indexer.vector_indexer import get_vector_store_index
+    from rag.indexer.vector_indexer import create_vector_index_from_existing_nodes
 
-    index = get_vector_store_index("examples/ast_cache")
+    index = create_vector_index_from_existing_nodes()
 
     assert index is not None
     assert hasattr(index, "as_retriever")

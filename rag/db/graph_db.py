@@ -17,10 +17,6 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
-def get_vector_index_config() -> VectorIndexConfig:
-    return VectorIndexConfig.from_env()
-
-
 class GraphDBManager:
     """Manager for Neo4j database operations."""
 
@@ -321,3 +317,31 @@ class GraphDBManager:
                 f"Failed to add relationships for {code_info.name}: {str(e)}"
             )
             raise
+
+    # ----------  upsert embeddings ----------
+    def upsert_embeddings(
+        self,
+        rows: list[dict],
+        vector_config: VectorIndexConfig,
+    ) -> int:
+        label = vector_config.node_label
+        prop = vector_config.vector_property
+
+        def _write(tx: ManagedTransaction, /) -> int:
+            result = tx.run(
+                f"""
+                UNWIND $rows AS row
+                MATCH (n:{label} {{ id: row.id }})
+                SET n.{prop} = row.vec,
+                    n.text = row.text,
+                    n.updated_at = timestamp()
+                RETURN count(n) as updated
+                """,
+                {"rows": rows},
+            )
+            record = result.single()
+            return record["updated"] if record else 0
+
+        with self.driver.session() as session:
+            updated_count = session.execute_write(_write)
+        return updated_count

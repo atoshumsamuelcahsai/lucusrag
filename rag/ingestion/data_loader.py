@@ -12,14 +12,10 @@ from llama_index.core import Document
 from rag.db.graph_db import GraphDBManager
 from rag.parser import process_code_element
 from rag.schemas import CodeElement
-from rag.schemas.vector_config import VectorIndexConfig
+from rag.schemas.vector_config import VectorIndexConfig, get_vector_index_config
+from rag.ingestion.embedding_loader import populate_embeddings
 
 logger = logging.getLogger(__name__)
-
-
-def get_vector_index_config() -> VectorIndexConfig:
-    """Get vector index configuration from environment variables."""
-    return VectorIndexConfig.from_env()
 
 
 def _process_ast_files(
@@ -101,7 +97,7 @@ def _build_code_db_graph(
             )
             continue
 
-    logger.info("Database populated successfully")
+    logger.info("Database created successfully")
 
 
 def _check_db_populated(
@@ -125,7 +121,8 @@ def process_code_files(
     ast_cache_dir: str,
     db_manager: t.Optional[GraphDBManager] = None,
     vector_config: t.Optional[VectorIndexConfig] = None,
-) -> t.List[Document]:
+    force_rebuild_graph: bool = False,
+) -> int:
     """
     Load AST-derived JSON files, optionally populate Neo4j, and return documents (llama_index.Document).
 
@@ -137,7 +134,7 @@ def process_code_files(
       • Always closes the database driver.
 
     Returns:
-        list[Document]: Parsed code documents ready for indexing.
+        .
 
     Raises:
         FileNotFoundError: If the AST cache directory does not exist.
@@ -160,13 +157,15 @@ def process_code_files(
         # 2) Parse files
         documents, code_infos = _process_ast_files(Path(ast_cache_dir))
 
-        # Populate database if empty
-        if not db_populated:
+        # Populate database if empty or force rebuild
+        # TODO: Implement partial updates for changed files only.
+        if not db_populated or force_rebuild_graph:
             logger.info(
                 f"Populating Neo4j with new code elements "
                 f"(label={vector_config.node_label})..."
             )
             _build_code_db_graph(db_manager, code_infos, vector_config)
+            populate_embeddings(db_manager, documents, vector_config)
         else:
             logger.info("Using existing database")
 
@@ -175,7 +174,7 @@ def process_code_files(
             f"Processed AST directory {path} in"
             f"{elapsed}s ({len(documents)} documents)."
         )
-        return documents
+        return len(documents)
 
     finally:
         db_manager.close()

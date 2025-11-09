@@ -7,7 +7,6 @@ from unittest.mock import Mock, MagicMock, patch
 from llama_index.core import Document
 
 from rag.ingestion.data_loader import (
-    get_vector_index_config,
     _process_ast_files,
     _create_schema,
     _build_code_db_graph,
@@ -16,7 +15,7 @@ from rag.ingestion.data_loader import (
 )
 from rag.db.graph_db import GraphDBManager
 from rag.schemas import CodeElement
-from rag.schemas.vector_config import VectorIndexConfig
+from rag.schemas.vector_config import VectorIndexConfig, get_vector_index_config
 
 
 @pytest.fixture
@@ -128,7 +127,7 @@ class TestProcessASTFiles:
         json_file.write_text(json.dumps(sample_ast_data))
 
         # Mock process_code_element to return a Document
-        mock_doc = Document(page_content="test", metadata={"name": "test"})
+        mock_doc = Document(text="test", metadata={"name": "test"})
         mock_process.return_value = mock_doc
 
         documents, code_infos = _process_ast_files(tmp_path)
@@ -154,7 +153,7 @@ class TestProcessASTFiles:
             json_file = tmp_path / f"test_{i}.json"
             json_file.write_text(json.dumps(data))
 
-        mock_process.return_value = Document(page_content="test", metadata={})
+        mock_process.return_value = Document(text="test", metadata={})
 
         documents, code_infos = _process_ast_files(tmp_path)
 
@@ -180,7 +179,7 @@ class TestProcessASTFiles:
         good_file = tmp_path / "good.json"
         good_file.write_text(json.dumps(good_data))
 
-        mock_process.return_value = Document(page_content="test", metadata={})
+        mock_process.return_value = Document(text="test", metadata={})
 
         documents, code_infos = _process_ast_files(tmp_path)
 
@@ -202,7 +201,7 @@ class TestProcessASTFiles:
         json_file = tmp_path / "minimal.json"
         json_file.write_text(json.dumps(minimal_data))
 
-        mock_process.return_value = Document(page_content="test", metadata={})
+        mock_process.return_value = Document(text="test", metadata={})
 
         documents, code_infos = _process_ast_files(tmp_path)
 
@@ -372,13 +371,15 @@ class TestProcessCodeFiles:
     @patch("rag.ingestion.data_loader._check_db_populated")
     @patch("rag.ingestion.data_loader._process_ast_files")
     @patch("rag.ingestion.data_loader._build_code_db_graph")
+    @patch("rag.ingestion.data_loader.populate_embeddings")
     @patch("rag.ingestion.data_loader.GraphDBManager")
     @patch("rag.ingestion.data_loader.get_vector_index_config")
     def test_process_code_files_db_empty(
         self,
         mock_get_config,
         mock_db_class,
-        mock_populate,
+        mock_populate_embeddings,
+        mock_build_graph,
         mock_process_files,
         mock_check_db,
         tmp_path,
@@ -391,19 +392,38 @@ class TestProcessCodeFiles:
         mock_db_class.return_value = mock_db_manager
         mock_check_db.return_value = False  # DB graph not built
 
-        mock_doc = Document(page_content="test", metadata={})
+        mock_doc = Document(text="test", metadata={})
         mock_process_files.return_value = ([mock_doc], [sample_code_element])
 
         result = process_code_files(str(tmp_path))
 
-        assert len(result) == 1
+        assert result == 1  # Returns count of documents
         mock_check_db.assert_called_once()
-        mock_populate.assert_called_once()
+        mock_build_graph.assert_called_once()
+        # Check that populate_embeddings was called with correct arguments
+        mock_populate_embeddings.assert_called_once()
+        call_args = mock_populate_embeddings.call_args
+        assert call_args[0][0] == mock_db_manager
+        assert len(call_args[0][1]) == 1
+        assert call_args[0][1][0] == mock_doc
+        # Compare vector_config fields instead of object identity
+        # The config passed might be a different instance but should have same values
+        actual_config = call_args[0][2]
+        assert isinstance(actual_config, VectorIndexConfig)
+        assert actual_config.name == vector_config.name
+        assert actual_config.dimension == vector_config.dimension
+        assert actual_config.node_label == vector_config.node_label
+        assert actual_config.vector_property == vector_config.vector_property
+        assert actual_config.similarity_metric == vector_config.similarity_metric
+        assert actual_config.neo4j_url == vector_config.neo4j_url
+        assert actual_config.neo4j_user == vector_config.neo4j_user
+        assert actual_config.neo4j_password == vector_config.neo4j_password
         mock_db_manager.close.assert_called_once()
 
     @patch("rag.ingestion.data_loader._check_db_populated")
     @patch("rag.ingestion.data_loader._process_ast_files")
     @patch("rag.ingestion.data_loader._build_code_db_graph")
+    @patch("rag.ingestion.data_loader.populate_embeddings")
     @patch("rag.ingestion.data_loader.GraphDBManager")
     @patch("rag.ingestion.data_loader.get_vector_index_config")
     @pytest.mark.asyncio
@@ -411,7 +431,8 @@ class TestProcessCodeFiles:
         self,
         mock_get_config,
         mock_db_class,
-        mock_populate,
+        mock_populate_embeddings,
+        mock_build_graph,
         mock_process_files,
         mock_check_db,
         tmp_path,
@@ -424,14 +445,15 @@ class TestProcessCodeFiles:
         mock_db_class.return_value = mock_db_manager
         mock_check_db.return_value = True  # DB graph is built
 
-        mock_doc = Document(page_content="test", metadata={})
+        mock_doc = Document(text="test", metadata={})
         mock_process_files.return_value = ([mock_doc], [sample_code_element])
 
         result = process_code_files(str(tmp_path))
 
-        assert len(result) == 1
+        assert result == 1  # Returns count of documents
         mock_check_db.assert_called_once()
-        mock_populate.assert_not_called()  # Should not build graph
+        mock_build_graph.assert_not_called()  # Should not build graph
+        mock_populate_embeddings.assert_not_called()  # Should not populate embeddings
         mock_db_manager.close.assert_called_once()
 
     @patch("rag.ingestion.data_loader._check_db_populated")
@@ -447,14 +469,14 @@ class TestProcessCodeFiles:
     ):
         """Test process_code_files with injected dependencies."""
         mock_check_db.return_value = True
-        mock_doc = Document(page_content="test", metadata={})
+        mock_doc = Document(text="test", metadata={})
         mock_process_files.return_value = ([mock_doc], [sample_code_element])
 
         result = process_code_files(
             str(tmp_path), db_manager=mock_db_manager, vector_config=vector_config
         )
 
-        assert len(result) == 1
+        assert result == 1  # Returns count of documents
         mock_db_manager.close.assert_called_once()
 
     @patch("rag.ingestion.data_loader._check_db_populated")
@@ -504,13 +526,14 @@ class TestProcessCodeFiles:
 
         result = process_code_files(str(tmp_path))
 
-        assert len(result) == 0
+        assert result == 0  # Returns count of documents (empty)
         mock_db_manager.close.assert_called_once()
 
 
 class TestProcessCodeFilesIntegration:
     """Integration tests for process_code_files."""
 
+    @patch("rag.ingestion.data_loader.populate_embeddings")
     @patch("rag.ingestion.data_loader.process_code_element")
     @patch("rag.ingestion.data_loader._check_db_populated")
     @patch("rag.ingestion.data_loader.GraphDBManager")
@@ -521,6 +544,7 @@ class TestProcessCodeFilesIntegration:
         mock_db_class,
         mock_check_db,
         mock_process_element,
+        mock_populate_embeddings,
         tmp_path,
         vector_config,
         sample_ast_data,
@@ -531,7 +555,8 @@ class TestProcessCodeFilesIntegration:
         mock_db_manager = MagicMock()
         mock_db_class.return_value = mock_db_manager
         mock_check_db.return_value = False  # New database
-        mock_process_element.return_value = Document(page_content="test", metadata={})
+        mock_process_element.return_value = Document(text="test", metadata={})
+        mock_populate_embeddings.return_value = 1
 
         # Create test JSON file
         json_file = tmp_path / "test.json"
@@ -541,8 +566,9 @@ class TestProcessCodeFilesIntegration:
         result = process_code_files(str(tmp_path))
 
         # Verify
-        assert len(result) == 1
+        assert result == 1  # Returns count of documents
         mock_db_manager.create_schema.assert_called_once()
         mock_db_manager.create_node.assert_called_once()
         mock_db_manager.create_relationships.assert_called_once()
+        mock_populate_embeddings.assert_called_once()
         mock_db_manager.close.assert_called_once()

@@ -1,8 +1,6 @@
 from __future__ import annotations
-from llama_index.core.schema import TextNode
 from dataclasses import dataclass, field
 from typing import List, Optional
-import textwrap
 from rag.prompts import PROMPTS
 import uuid
 
@@ -32,60 +30,6 @@ class CodeElement:
         """Generate a unique ID for the code element."""
         _id = f"{self.type}:{self.name}:{self.file_path}"
         return str(uuid.uuid5(uuid.NAMESPACE_URL, _id))
-
-    def format_parameters(self, params: List[dict]) -> Optional[str]:
-        """Format parameters into a searchable string."""
-        if not params:
-            return None
-
-        param_strs = []
-        for param in params:
-            name = param.get("name", "")
-            param_type = param.get("type", "")
-            default = param.get("default", "")
-
-            param_str = f"{name}"
-            if param_type:
-                param_str += f":{param_type}"
-            if default:
-                param_str += f"={default}"
-            param_strs.append(param_str)
-
-        return ", ".join(param_strs)
-
-    def to_node(self) -> TextNode:
-        """Convert to LlamaIndex node."""
-        # Format code with minimal essential information
-        text_content = f"""
-        {self.type.upper()}: {self.name}
-        File: {self.file_path}
-        
-        {textwrap.dedent(self.code).strip() if self.code else 'No code available'}
-        """
-
-        # Clean up the text content
-        text_content = textwrap.dedent(text_content).strip()
-
-        metadata = {
-            "id": self.id,
-            "type": self.type,
-            "name": self.name,
-            "file_path": self.file_path,
-            "parameters": (
-                self.format_parameters(self.parameters) if self.parameters else None
-            ),
-            "return_type": self.return_type,
-            "decorators": ",".join(self.decorators) if self.decorators else None,
-            "dependencies": ",".join(self.dependencies) if self.dependencies else None,
-            "base_classes": ",".join(self.base_classes) if self.base_classes else None,
-            "methods": ",".join(self.methods) if self.methods else None,
-            "assignments": ",".join(self.assignments) if self.assignments else None,
-            "calls": ",".join(str(call) for call in self.calls) if self.calls else None,
-            "explanation": self.explanation if self.explanation else None,
-        }
-        metadata = {k: v for k, v in metadata.items() if v not in (None, "", [])}
-
-        return TextNode(text=text_content, metadata=metadata)
 
     def to_dict(self) -> dict:
         """Convert CodeElement to a dictionary representation."""
@@ -125,13 +69,15 @@ class CodeElement:
 
             llm = get_llm(llm_provider)
 
+            from rag.parser import format_parameters
+
             prompt = await PROMPTS.render(
                 "code_explain_factual",
                 type=self.type,
                 name=self.name,
                 file_path=self.file_path,
                 code=self.code,
-                parameters=self.format_parameters(self.parameters),
+                parameters=format_parameters(self.parameters),
                 return_type=self.return_type,
                 docstring=self.docstring,
             )

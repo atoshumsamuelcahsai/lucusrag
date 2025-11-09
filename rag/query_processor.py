@@ -1,51 +1,50 @@
-"""
-Module for processing and indexing code files into Neo4j database.
-Handles database population and code element processing.
-"""
-
 import os
-from llama_index.core.query_engine import RetrieverQueryEngine
 from typing import Optional
 import typing as t
 
-from rag.engine import engine
 from rag.exceptions import QueryProcessingError
-from rag.ingestion.data_loader import get_vector_index_config
-
+from rag.indexer.orchestrator import CodeGraphIndexer
 import logging
 import asyncio
 
 logger = logging.getLogger(__name__)
 
 
-_query_engine: Optional[RetrieverQueryEngine] = None
-_query_engine_lock = asyncio.Lock()
+_orchestrator: Optional[CodeGraphIndexer] = None
+_orchestrator_lock = asyncio.Lock()
 
 
-async def initialize_query_engine(ast_cache_dir: str) -> RetrieverQueryEngine:
+async def initialize_query_engine(
+    ast_cache_dir: str, initialize_mode: str = "cold"
+) -> CodeGraphIndexer:
     """
-    Initialize the query engine exactly once in an asyncio-safe way.
+    Initialize the Orchestrator exactly once in an asyncio-safe way.
     """
-    global _query_engine
-    async with _query_engine_lock:
-        if _query_engine is not None:
-            logger.debug("Query engine already initialized by another coroutine.")
-            return _query_engine
+    if initialize_mode not in {"cold", "refresh"}:
+        raise QueryProcessingError("initialize_mode must be 'cold' or 'refresh'")
 
-        logger.info(f"Creating new query engine with cache dir: {ast_cache_dir}")
+    global _orchestrator
+    async with _orchestrator_lock:
+        if _orchestrator is not None:
+            logger.debug("Orchestrator already initialized by another coroutine.")
+            return _orchestrator
+
+        logger.info(f"Creating new Orchestrator with cache dir: {ast_cache_dir}")
         try:
-            _query_engine = engine.get_query_engine(
-                ast_cache_dir, get_vector_index_config()
-            )
+            _orchestrator = CodeGraphIndexer(ast_cache_dir)
+            if initialize_mode == "cold":
+                await _orchestrator.build()
+            elif initialize_mode == "refresh":
+                await _orchestrator.refresh()
             logger.info("Query engine created successfully.")
-            return _query_engine
+            return _orchestrator
         except Exception as exc:
-            msg = "Failed to initialize query engine."
+            msg = "Failed to initialize Orchestrator."
             logger.exception(msg)
             raise QueryProcessingError(msg) from exc
 
 
-async def get_query_engine() -> RetrieverQueryEngine:
+async def get_orchestrator() -> CodeGraphIndexer:
     """
     Retrieve the cached query engine or initialize it once asynchronously.
 
@@ -59,11 +58,6 @@ async def get_query_engine() -> RetrieverQueryEngine:
         msg = "AST_CACHE_DIR environment variable is not set"
         logger.error(msg)
         raise QueryProcessingError(msg)
-
-    global _query_engine
-    if _query_engine is not None:
-        logger.info("Using existing query engine from cache")
-        return _query_engine
 
     return await initialize_query_engine(ast_cache_dir)
 
@@ -84,14 +78,14 @@ def log_chunks_retrieved(response: t.Any) -> None:
 def validate_query_text(query_text: str) -> None:
     """Ensure query text is not empty or whitespace only."""
     if not query_text.strip():
-        msg = "Empty text cannot be empty or whitespace only."
+        msg = "Query text cannot be empty or whitespace only."
         logger.error(msg)
         raise QueryProcessingError(msg)
 
 
 async def process_query(query_text: str, log_chunks: bool = False) -> str:
     """
-        Process a query using the cached query engine.
+        Process a query using the cached Orchestrator.
         Args:
         - query_text: The query string to process.
         - log_chunks: Whether to log retrieved document chunks.
@@ -103,13 +97,10 @@ async def process_query(query_text: str, log_chunks: bool = False) -> str:
     logger.info(f"Processing query: {query_text}")
     try:
         validate_query_text(query_text)
-
-        logger.info("Initializing query engine...")
-        query_engine: RetrieverQueryEngine = await get_query_engine()
-
         logger.info("Executing query...")
         logger.info("Starting document retrieval...")
-        response = await query_engine.aquery(query_text)
+        orch = await get_orchestrator()
+        response = await orch.aquery(query_text)
 
         if log_chunks:
             log_chunks_retrieved(response)
@@ -120,7 +111,7 @@ async def process_query(query_text: str, log_chunks: bool = False) -> str:
         raise
     except Exception as e:
         # Capture unexpected failures.
-        msg = f"Error in while processing query: {e}"
+        msg = f"Error while processing query: {e}"
         logger.exception(msg)
         raise QueryProcessingError(msg) from e
 

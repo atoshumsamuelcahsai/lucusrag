@@ -26,26 +26,27 @@ def test_register_embedding_decorator_registers_and_returns_factory(monkeypatch)
 
 
 def test_get_embeddings_raises_when_api_key_missing(monkeypatch):
-    monkeypatch.delenv("VOYAGE_API_KEY", raising=False)
+    monkeypatch.delenv("ANYTHING_API_KEY", raising=False)
     with pytest.raises(EnvironmentError) as e:
         factory_mod.get_embeddings("anything")
-    assert "VOYAGE_API_KEY" in str(e.value)
+    assert "ANYTHING_API_KEY" in str(e.value)
 
 
 def test_get_embeddings_raises_for_unknown_provider(monkeypatch):
     # Ensure an API key exists so we test the provider branch
-    monkeypatch.setenv("VOYAGE_API_KEY", "TESTKEY")
+    # Provider name "unknownprovider" uppercased becomes "UNKNOWNPROVIDER"
+    monkeypatch.setenv("UNKNOWNPROVIDER_API_KEY", "TESTKEY")
     # Empty registry to guarantee "unknown"
     monkeypatch.setattr(factory_mod, "_EMBEDDING_REGISTRY", {}, raising=True)
 
     with pytest.raises(ValueError) as e:
-        factory_mod.get_embeddings("unknown-provider")
+        factory_mod.get_embeddings("unknownprovider")
     # error message should mention provider name
-    assert "unknown-provider" in str(e.value)
+    assert "unknownprovider" in str(e.value)
 
 
 def test_get_embeddings_calls_factory_with_api_key(monkeypatch):
-    monkeypatch.setenv("VOYAGE_API_KEY", "SECRET123")
+    monkeypatch.setenv("DUMMY_API_KEY", "SECRET123")
     monkeypatch.setattr(factory_mod, "_EMBEDDING_REGISTRY", {}, raising=True)
 
     # Capture the api_key passed into the factory and return a dummy embedding

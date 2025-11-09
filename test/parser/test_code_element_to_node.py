@@ -1,5 +1,6 @@
 from rag.schemas import CodeElement
-import rag.schemas.code_element as schema_mod
+from rag.parser import parser
+from rag.parser.parser import to_node
 
 
 class FakeTextNode:
@@ -15,7 +16,7 @@ class FakeDocument:
 
 
 def test_to_node_builds_text_and_metadata(monkeypatch):
-    monkeypatch.setattr(schema_mod, "TextNode", FakeTextNode)
+    monkeypatch.setattr(parser, "TextNode", FakeTextNode)
 
     ce = CodeElement(
         type="function",
@@ -34,14 +35,14 @@ def test_to_node_builds_text_and_metadata(monkeypatch):
         decorators=["pure", "vectorized"],
         dependencies=["typing", "functools"],
         base_classes=[],
-        methods=None,
+        methods=[],
         calls=["sum", "print"],
         assignments=[],
         explanation="simple add",
         is_async=False,
     )
 
-    node = ce.to_node()
+    node = to_node(ce)
     assert isinstance(node, FakeTextNode)
     assert "FUNCTION: add" in node.text
     assert "File: pkg/math.py" in node.text
@@ -52,6 +53,9 @@ def test_to_node_builds_text_and_metadata(monkeypatch):
     assert md["type"] == "function"
     assert md["name"] == "add"
     assert md["file_path"] == "pkg/math.py"
+    assert "parameters" in md
     assert md["parameters"] == "a:int, b:int=0"
+    assert "return_type" in md
     assert md["return_type"] == "int"
+    assert "decorators" in md
     assert md["decorators"] == "pure,vectorized"

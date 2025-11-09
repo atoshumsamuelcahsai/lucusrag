@@ -1,16 +1,22 @@
+"""
+Indexer module for creating vector search infrastructure.
+
+This module handles Phase 3 of the pipeline:
+- Creating vector indexes from existing Neo4j nodes with embeddings
+- Configuring LlamaIndex settings (LLM, embeddings, parsers)
+- Does NOT modify graph data (read-only for indexing)
+"""
+
 import logging
 import asyncio
 
-from rag.providers import embeddings
-from rag.ingestion.data_loader import get_vector_index_config, process_code_files
-from rag.providers import get_llm, EmbeddingProvider
-from rag.parser import CodeElementGraphParser
-from llama_index.core import Document
+from rag.providers import get_llm, get_embeddings, EmbeddingProvider
+from rag.parser import parse_documents_to_nodes
+from rag.schemas.vector_config import VectorIndexConfig
 from llama_index.core import Settings
 from llama_index.core import VectorStoreIndex
 from llama_index.graph_stores.neo4j import Neo4jGraphStore
 from llama_index.vector_stores.neo4jvector import Neo4jVectorStore
-from rag.db.graph_db import VectorIndexConfig
 
 import typing as t
 
@@ -36,13 +42,12 @@ async def graph_configure_settings(
             return
         logger.info("Configuring LlamaIndex Settings....")
 
-        custom_parser = CodeElementGraphParser()
-        embedding_model = embeddings.get_embeddings(
+        embedding_model = get_embeddings(
             provider=EmbeddingProvider(embedding_provider).value
         )
         Settings.llm = get_llm(llm_provider)
         Settings.embed_model = embedding_model
-        Settings.node_parser = custom_parser  # type: ignore[assignment]
+        Settings.node_parser = parse_documents_to_nodes  # type: ignore[assignment]
         Settings.num_output = num_output
         Settings.context_window = context_window
 
@@ -51,7 +56,6 @@ async def graph_configure_settings(
 
 
 def _graph_configure_settings_blocking(**kw) -> None:  # type: ignore
-    # TODO: Check for better way to do this.
     """Call the async settings config from sync code safely."""
     try:
         asyncio.get_running_loop()
@@ -59,36 +63,40 @@ def _graph_configure_settings_blocking(**kw) -> None:  # type: ignore
         asyncio.run(graph_configure_settings(**kw))
     else:
         # If caller is already async, they should await the async variant.
-        # We don’t change the public API here, just log.
+        # We don't change the public API here, just log.
         logger.debug("Settings called from running loop; assume configured elsewhere.")
 
 
-def get_vector_index(
-    documents: t.List[Document], vector_config: t.Optional[VectorIndexConfig] = None
+def create_vector_index_from_existing_nodes(
+    vector_config: t.Optional[VectorIndexConfig] = None,
 ) -> VectorStoreIndex:
-    """Create a vector store index with Neo4j backend
-    using existing GraphDBManager."""
+    """
+    Create vector index from existing Neo4j nodes with embeddings.
+
+    This function:
+    - Does NOT create or update nodes
+    - Does NOT generate embeddings
+    - Only creates a VectorStoreIndex that points to existing nodes
+    - Uses existing embeddings and relationships
+
+    Args:
+        vector_config: Vector index configuration (loads from env if None)
+
+    Returns:
+        VectorStoreIndex configured to use existing Neo4j data
+    """
     if vector_config is None:
-        logger.info(
-            "Empty vector index confguration is given," "trying to load it from evns"
-        )
         vector_config = VectorIndexConfig.from_env()
+
     _graph_configure_settings_blocking()
 
-    if not documents:
-        logger.warning(
-            "get_vector_index called with \
-            empty documents; index will be empty."
-        )
-
-    # Initialize GraphDBManager with existing config
-    # db_manager = GraphDBManager()
+    logger.info("Creating vector index from existing nodes...")
 
     neo4j_url = vector_config.neo4j_url
     neo4j_user = vector_config.neo4j_user
     neo4j_password = vector_config.neo4j_password
 
-    # Create vector store using URL and credentials instead of driver
+    # Create vector store - points to existing nodes with embeddings
     vector_store = Neo4jVectorStore(
         url=neo4j_url,
         username=neo4j_user,
@@ -101,32 +109,25 @@ def get_vector_index(
         embedding_node_property=vector_config.vector_property,
     )
 
-    # Create graph store using existing relationships
+    # Create graph store - uses existing relationships
     graph_store = Neo4jGraphStore(
         url=neo4j_url,
         username=neo4j_user,
         password=neo4j_password,
         node_label=vector_config.node_label,
-        edge_labels=["HAS_METHOD", "INHERITS_FROM", "CALLS", "DEPENDS_ON"],
+        edge_labels=["INHERITS_FROM", "CALLS", "DEPENDS_ON"],
         node_id_property="id",
         text_node_property="text",
-        embedding_node_property="embedding",
+        embedding_node_property=vector_config.vector_property,
         edge_relation_property="RELATES_TO",
     )
 
-    # Create the index
-    # transformations creates embedding
-    index = VectorStoreIndex.from_documents(
-        documents,
+    # Create index from existing nodes (no document processing needed)
+    index = VectorStoreIndex.from_vector_store(
         vector_store=vector_store,
         graph_store=graph_store,
-        transformations=[Settings.node_parser],
     )
 
+    logger.info("Vector index created successfully from existing nodes")
+
     return index
-
-
-def get_vector_store_index(ast_cache_dir: str) -> VectorStoreIndex:
-    documents = process_code_files(ast_cache_dir)
-    vector_config = get_vector_index_config()
-    return get_vector_index(documents, vector_config)

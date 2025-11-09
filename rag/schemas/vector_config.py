@@ -29,7 +29,7 @@ class VectorIndexConfig:
     def from_env(cls) -> "VectorIndexConfig":
         """Construct configuration from environment variables."""
         return cls(
-            name=os.getenv("VECTOR_INDEX_NAME", "james_code_embeddings"),
+            name=os.getenv("VECTOR_INDEX_NAME", "lucus_code_embeddings"),
             dimension=int(os.getenv("VECTOR_DIMENSION", "1536")),
             node_label=os.getenv("NODE_LABEL", "LucusCodeElement"),
             vector_property=os.getenv("VECTOR_PROPERTY", "embedding"),
@@ -38,3 +38,8 @@ class VectorIndexConfig:
             neo4j_user=os.getenv("NEO4J_USER", "neo4j"),
             neo4j_password=os.getenv("NEO4J_PASSWORD", "password"),
         )
+
+
+def get_vector_index_config() -> VectorIndexConfig:
+    """Get vector index configuration from environment variables."""
+    return VectorIndexConfig.from_env()

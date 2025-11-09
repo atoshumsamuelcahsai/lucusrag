@@ -4,9 +4,13 @@ import pytest
 from unittest.mock import Mock, MagicMock, patch
 from neo4j import Driver
 
-from rag.db.graph_db import GraphDBManager, get_vector_index_config
+from rag.db.graph_db import GraphDBManager
 from rag.schemas import CodeElement
-from rag.schemas.vector_config import Neo4jConfig, VectorIndexConfig
+from rag.schemas.vector_config import (
+    Neo4jConfig,
+    VectorIndexConfig,
+    get_vector_index_config,
+)
 
 
 @pytest.fixture

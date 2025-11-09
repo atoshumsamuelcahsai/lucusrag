@@ -11,9 +11,9 @@ from llama_index.core import VectorStoreIndex
 from llama_index.core.query_engine import RetrieverQueryEngine
 
 
-from rag.ingestion.data_loader import process_code_files, get_vector_index_config
+from rag.ingestion import process_code_files
 from rag.indexer.vector_indexer import (
-    get_vector_index,
+    create_vector_index_from_existing_nodes,
     graph_configure_settings,
 )
 from rag.engine.engine import make_query_engine
@@ -63,6 +63,7 @@ class CodeGraphIndexer:
         schema_version: int = 1,
         top_k: int = 5,
     ) -> None:
+
         self.ast_dir = Path(ast_cache_dir)
         self.manifest_path = (
             Path(manifest_path)
@@ -76,35 +77,39 @@ class CodeGraphIndexer:
         self._engine: Optional[RetrieverQueryEngine] = None
 
     async def build(self) -> BuildResult:
-        """Cold build: parse → index → wire engine."""
+        """
+        Cold build: build graph structure (nodes + relationships)
+        and if DB empty populate embeddings and graph
+        """
+
         logger.info("Cold build started.....")
         t0 = time.perf_counter()
 
-        # global Settings.llm, embed_model, parser
         await self._get_graph_config()
+        config = VectorIndexConfig.from_env()
 
-        # VectorIndexConfig.from env
-        config = get_vector_index_config()
+        # Build graph structure (nodes + relationships)
+        #  and populate embeddings and graph if DB empty
+        logger.info(
+            "Building graph structure (nodes + relationships + populate if empty)..."
+        )
+        _num_docs = process_code_files(str(self.ast_dir))
+        logger.info(f"Graph structure built with {_num_docs} nodes")
 
-        # already handles optional DB population
-        docs = process_code_files(str(self.ast_dir))
+        logger.info("Getting vector index from existing nodes…")
+        self._index = create_vector_index_from_existing_nodes(config)
+        logger.info("Vector index created successfully!!!")
 
-        # (re)build vector/graph index
-        self._index = get_vector_index(docs, config)
+        await self._update_manifest(config)
+        logger.info("Manifest files updated successfully!!!")
 
-        # 4) wire query engine
+        # Wire query engine
         self._engine = make_query_engine(self._index, k=self.top_k)
 
-        # 5) write manifest for future diffs
-        _snap_shot_files = await self._snapshot_files()
-        await self._save_manifest(
-            _snap_shot_files, embed_sig=self._embed_signature(config)
-        )
-
         dt = time.perf_counter() - t0
-        logger.info(f"Cold build successfully finished in {dt}s")
+        logger.info(f"Cold build successfully finished in {dt:.2f}s")
         return BuildResult(
-            documents=len(docs),
+            documents=_num_docs,
             elapsed_s=dt,
             mode=Mode.BUILD,
             schema_version=self.schema_version,
@@ -112,15 +117,18 @@ class CodeGraphIndexer:
 
     async def refresh(self) -> BuildResult:
         """
-        Incremental: detect changed/removed AST JSONs
-        and update only those.
-        NOTE: This is a pragmatic first step — rebuild
-        the index if anything changed.
-        Investigate and implement real partial upserts later.
+        Incremental: detect changed/removed AST JSONs and rebuild.
+
+        Uses the same 2-phase architecture as build():
+        Phase 1: Rebuild graph structure (force rebuild)
+        Phase 2: Recreate vector index
+
+        NOTE: Currently rebuilds everything on any change.
+        Future optimization: partial updates for changed files only.
         """
-        logger.info("refreshing index has started........")
+        logger.info("Refresh started........")
         t0 = time.perf_counter()
-        config: VectorIndexConfig = get_vector_index_config()
+        config: VectorIndexConfig = VectorIndexConfig.from_env()
 
         prev = self._load_manifest()
         now = await self._snapshot_files()
@@ -129,7 +137,7 @@ class CodeGraphIndexer:
         )
 
         if not changed and not removed:
-            logger.info("No change has been detected, no need for refreshing index....")
+            logger.info("No changes detected, skipping refresh")
             return BuildResult(
                 documents=0,
                 elapsed_s=0.0,
@@ -137,26 +145,46 @@ class CodeGraphIndexer:
                 schema_version=self.schema_version,
             )
 
-        # Simple, safe strategy: re-run the loader (cheap for
-        # lucus repos but generally expensive).
-        docs = process_code_files(str(self.ast_dir))
-        self._index = get_vector_index(docs, config)
-        self._engine = make_query_engine(self._index, k=self.top_k)
+        logger.info(f"Detected {len(changed)} changed and {len(removed)} removed files")
+
+        # Phase 1: Rebuild graph structure (force rebuild)
+        logger.info("Rebuilding graph structure...")
+        docs_len = process_code_files(str(self.ast_dir), force_rebuild_graph=True)
+
         await self._save_manifest(now, embed_sig=self._embed_signature(config))
+        logger.info("Manifest files updated successfully!!!")
+
+        # Phase 2: Recreate vector index
+        self._index = create_vector_index_from_existing_nodes(config)
+        self._engine = make_query_engine(self._index, k=self.top_k)
+        logger.info("Vector index recreated successfully")
 
         dt = time.perf_counter() - t0
-        logger.info(f"Index Refresher has successfully finished in {dt}s")
+        logger.info(f"Refresh successfully finished in {dt:.2f}s")
         return BuildResult(
-            documents=len(docs),
+            documents=docs_len,
             elapsed_s=dt,
             mode=Mode.REFRESH,
             schema_version=self.schema_version,
+        )
+
+    async def _update_manifest(self, config: VectorIndexConfig) -> None:
+        # Write manifest for future diffs
+        _snap_shot_files = await self._snapshot_files()
+        await self._save_manifest(
+            _snap_shot_files, embed_sig=self._embed_signature(config)
         )
 
     def query(self, text: str) -> str:
         if not self._engine:
             raise RuntimeError("Indexer not built. Call build() or refresh() first.")
         resp = self._engine.query(text)
+        return str(resp)
+
+    async def aquery(self, text: str) -> str:
+        if not self._engine:
+            raise RuntimeError("Indexer not built. Call build() or refresh() first.")
+        resp = await self._engine.aquery(text)
         return str(resp)
 
     async def _get_graph_config(self) -> None:

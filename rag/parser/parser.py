@@ -4,47 +4,130 @@ from llama_index.core.schema import TextNode
 from llama_index.core import Document
 
 from rag.schemas import CodeElement
+import textwrap
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def convert_to_llama_nodes(analysis_data: t.Dict[str, t.Any]) -> t.List[TextNode]:
-    """Convert analysis data to LlamaIndex CodeElement nodes."""
-    nodes: t.List[TextNode] = []
+def format_parameters(params: t.List[dict]) -> t.Optional[str]:
+    """Format parameters into a searchable string."""
+    if not params:
+        return None
 
-    for element in analysis_data["elements"]:
-        node = CodeElement(
-            type=element["type"],
-            name=element["name"],
-            docstring=element["docstring"],
-            code=element["code"],
-            file_path=element["file_path"],
-            parameters=element.get("parameters"),
-            return_type=element.get("return_type"),
-            decorators=element.get("decorators"),
-            dependencies=element.get("dependencies"),
-            base_classes=element.get("base_classes"),
-            methods=element.get("methods"),
-            calls=element.get("calls"),
-            assignments=element.get("assignments"),
-            explanation=element.get("explanation"),
-        )
-        nodes.append(node.to_node())
-    return nodes
+    param_strs = []
+    for param in params:
+        name = param.get("name", "")
+        param_type = param.get("type", "")
+        default = param.get("default", "")
+
+        param_str = f"{name}"
+        if param_type:
+            param_str += f":{param_type}"
+        if default:
+            param_str += f"={default}"
+        param_strs.append(param_str)
+
+    return ", ".join(param_strs)
 
 
-class CodeElementParser:
-    def parse(self, code_elements: t.List[CodeElement]) -> t.List["TextNode"]:
-        """Parse code elements into LlamaIndex TextNodes."""
-        return [element.to_node() for element in code_elements]
+def create_text_representation(metadata: t.Dict) -> str:
+    """
+    Create a formatted text representation of code element metadata.
+
+    Used for:
+    - Creating embeddings (embedding_loader.py)
+    - Creating TextNodes for indexing
+
+    Args:
+        metadata: Dictionary containing code element metadata
+
+    Returns:
+        Formatted text representation
+    """
+    parameters = metadata.get("parameters") or []
+    dependencies = metadata.get("dependencies") or []
+    base_classes = metadata.get("base_classes") or []
+    calls = metadata.get("calls") or []
+    decorators = metadata.get("decorators") or []
+    methods = metadata.get("methods") or []
+    assignments = metadata.get("assignments") or []
+    docstring = metadata.get("docstring") or ""
+    return_type = metadata.get("return_type") or ""
+    explanation = metadata.get("explanation") or ""
+    file_path = metadata.get("file_path") or ""
+    is_async = metadata.get("is_async", False)
+
+    parts = []
+
+    # Basic information
+    parts.append(f"Name: {metadata.get('name', '')}")
+    parts.append(f"Type: {metadata.get('type', '')}")
+    parts.append(f"File: {file_path}")
+    if is_async:
+        parts.append("Async: true")
+
+    # Description
+    if docstring:
+        parts.append(f"Description: {docstring}")
+
+    # AI-generated explanation (if available)
+    if explanation:
+        parts.append(f"Explanation: {explanation}")
+
+    # Code
+    code = metadata.get("code", "")
+    if code:
+        parts.append(f"\nCode:\n{code}")
+
+    # Decorators
+    if decorators:
+        parts.append(f"Decorators: {', '.join(str(d) for d in decorators)}")
+
+    # Parameters
+    param_str = format_parameters(parameters)
+    if param_str:
+        parts.append(f"Parameters: {param_str}")
+
+    # Return type
+    if return_type:
+        parts.append(f"Return Type: {return_type}")
+
+    # Relationships
+    if dependencies:
+        parts.append(f"Dependencies: {', '.join(str(d) for d in dependencies)}")
+
+    if base_classes:
+        parts.append(f"Base Classes: {', '.join(str(b) for b in base_classes)}")
+
+    if calls:
+        parts.append(f"Function Calls: {', '.join(str(c) for c in calls)}")
+
+    if methods:
+        parts.append(f"Methods: {', '.join(str(m) for m in methods)}")
+
+    if assignments:
+        parts.append(f"Assignments: {', '.join(str(a) for a in assignments)}")
+
+    return "\n".join(parts)
 
 
 def process_code_element(code_info: CodeElement) -> Document:
-    """Process a single code element into a document."""
+    """
+    Convert a CodeElement to a LlamaIndex Document.
+
+    Used by data_loader.py to prepare documents for indexing.
+
+    Args:
+        code_info: CodeElement instance
+
+    Returns:
+        Document with code element metadata
+    """
     return Document(
         page_content=code_info.code,
         metadata={
+            "id": code_info.id,
             "name": code_info.name,
             "type": code_info.type,
             "file_path": code_info.file_path,
@@ -59,89 +142,91 @@ def process_code_element(code_info: CodeElement) -> Document:
             "decorators": code_info.decorators or [],
             "assignments": code_info.assignments or [],
             "explanation": code_info.explanation or "",
+            "is_async": code_info.is_async,
         },
     )
 
 
-class CodeElementGraphParser:
-    """Parser for code elements to create structured documents."""
+def to_node(code_info: CodeElement) -> TextNode:
+    """Convert to LlamaIndex node."""
+    # Format code with minimal essential information
+    text_content = f"""
+    {code_info.type.upper()}: {code_info.name}
+    File: {code_info.file_path}
+    
+    {textwrap.dedent(code_info.code).strip() if code_info.code else 'No code available'}
+    """
 
-    def __init__(self) -> None:
-        # Reduce to essential fields that match the document creation
-        self.required_fields = ["name", "type", "file_path"]
+    # Clean up the text content
+    text_content = textwrap.dedent(text_content).strip()
 
-    def __call__(
-        self,
-        nodes: t.List[Document],
-        show_progress: t.Optional[bool] = None,
-        **kwargs: t.Any,
-    ) -> t.List[TextNode]:
-        """Transform documents into nodes."""
-        result_nodes = []
-        for doc in nodes:
-            try:
-                # Extract the basic metadata we know exists
-                metadata = {
-                    "name": doc.metadata.get("name", ""),
-                    "type": doc.metadata.get("type", ""),
-                    "file_path": doc.metadata.get("file_path", ""),
-                    "docstring": doc.metadata.get("docstring", ""),
-                    "code": doc.metadata.get("code", ""),
-                    "parameters": doc.metadata.get("parameters", []),
-                    "return_type": doc.metadata.get("return_type", ""),
-                    "dependencies": doc.metadata.get("dependencies", []),
-                    "base_classes": doc.metadata.get("base_classes", []),
-                    "calls": doc.metadata.get("calls", []),
-                }
+    metadata = {
+        "id": code_info.id,
+        "type": code_info.type,
+        "name": code_info.name,
+        "file_path": code_info.file_path,
+        "parameters": (
+            format_parameters(code_info.parameters) if code_info.parameters else None
+        ),
+        "return_type": code_info.return_type,
+        "decorators": ",".join(code_info.decorators) if code_info.decorators else None,
+        "dependencies": (
+            ",".join(code_info.dependencies) if code_info.dependencies else None
+        ),
+        "base_classes": (
+            ",".join(code_info.base_classes) if code_info.base_classes else None
+        ),
+        "methods": ",".join(code_info.methods) if code_info.methods else None,
+        "assignments": (
+            ",".join(code_info.assignments) if code_info.assignments else None
+        ),
+        "calls": (
+            ",".join(str(call) for call in code_info.calls) if code_info.calls else None
+        ),
+        "explanation": code_info.explanation if code_info.explanation else None,
+    }
+    metadata = {k: v for k, v in metadata.items() if v not in (None, "", [])}
 
-                # Create text representation
-                text = self.create_text_representation(metadata)
+    return TextNode(text=text_content, metadata=metadata)
 
-                # Create node
-                node = TextNode(
-                    text=text,
-                    metadata={
-                        "id": f"{metadata['file_path']}:{metadata['type']}:{metadata['name']}",
-                        "name": metadata["name"],
-                        "type": metadata["type"],
-                        "file_path": metadata["file_path"],
-                    },
-                )
-                result_nodes.append(node)
 
-            except Exception as e:
-                logger.exception(f"Parser error for document: {str(e)}")
-                continue
+def parse_documents_to_nodes(
+    documents: t.List[Document],
+    show_progress: t.Optional[bool] = None,
+    **kwargs: t.Any,
+) -> t.List[TextNode]:
+    """
+    Transform Documents into TextNodes with formatted text.
 
-        return result_nodes
+    Used by LlamaIndex as Settings.node_parser during indexing.
 
-    def create_text_representation(self, metadata: t.Dict) -> str:
-        """Create a formatted text representation of the code element."""
-        # Convert None values to empty lists/strings
-        parameters = metadata.get("parameters") or []
-        dependencies = metadata.get("dependencies") or []
-        base_classes = metadata.get("base_classes") or []
-        calls = metadata.get("calls") or []
-        docstring = metadata.get("docstring") or ""
-        return_type = metadata.get("return_type") or ""
+    Args:
+        documents: List of Document objects
+        show_progress: Whether to show progress (unused, for LlamaIndex compatibility)
+        **kwargs: Additional arguments (unused, for LlamaIndex compatibility)
 
-        return f"""
-        Name: {metadata['name']}
-        Type: {metadata['type']}
-        Description: {docstring}
+    Returns:
+        List of TextNode objects with formatted text
+    """
+    result_nodes = []
+    for doc in documents:
+        try:
+            # Create text representation
+            text = create_text_representation(doc.metadata)
 
-        Code:
-        {metadata['code']}
+            node = TextNode(
+                text=text,
+                metadata={
+                    "id": doc.metadata.get("id"),
+                    "name": doc.metadata.get("name"),
+                    "type": doc.metadata.get("type"),
+                    "file_path": doc.metadata.get("file_path"),
+                },
+            )
+            result_nodes.append(node)
 
-        Parameters: {self.format_parameters(parameters)}
-        Return Type: {return_type}
-        Dependencies: {', '.join(str(d) for d in dependencies)}
-        Base Classes: {', '.join(str(b) for b in base_classes)}
-        Function Calls: {', '.join(str(c) for c in calls)}
-        """
+        except Exception as e:
+            logger.exception(f"Parser error for document: {str(e)}")
+            continue
 
-    def format_parameters(self, parameters: t.List[t.Dict]) -> str:
-        """Format parameters into a readable string."""
-        if not parameters:
-            return ""
-        return ", ".join(f"{p.get('name', '')}:{p.get('type', '')}" for p in parameters)
+    return result_nodes
