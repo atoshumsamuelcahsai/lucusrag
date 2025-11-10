@@ -1,8 +1,11 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional
-from rag.prompts import PROMPTS
+import typing as t
+from rag.prompts.factory import PromptFactory
 import uuid
+import random
+import asyncio
 
 
 @dataclass
@@ -63,28 +66,49 @@ class CodeElement:
         Args:
             llm_provider: LLM provider to use (default: "anthropic")
         """
-        try:
-            # Use the provider abstraction instead of hardcoding Anthropic
-            from rag.providers.llms import get_llm
 
-            llm = get_llm(llm_provider)
+        from rag.parser.parser import format_parameters
+        from rag.providers.llms import get_llm
 
-            from rag.parser import format_parameters
+        llm = get_llm(llm_provider)
+        prompts = await PromptFactory.get_instance()
+        prompt = await prompts.render(
+            "code_explain_factual",
+            type=self.type,
+            name=self.name,
+            file_path=self.file_path,
+            code=self.code,
+            parameters=format_parameters(self.parameters),
+            return_type=self.return_type,
+            docstring=self.docstring,
+        )
+        # Use the LLM provider's async complete method
+        response = await self._with_retries(lambda: llm.acomplete(prompt))
+        self.explanation = response.text
 
-            prompt = await PROMPTS.render(
-                "code_explain_factual",
-                type=self.type,
-                name=self.name,
-                file_path=self.file_path,
-                code=self.code,
-                parameters=format_parameters(self.parameters),
-                return_type=self.return_type,
-                docstring=self.docstring,
-            )
+    async def _with_retries(
+        self,
+        coro_factory: t.Callable[[], t.Coroutine[t.Any, t.Any, t.Any]],
+        retries: int = 5,
+        timeout_s: float = 30,
+    ) -> t.Any:
+        """Retry a coroutine factory with exponential backoff; propagate cancellations."""
+        backoff = 0.5
+        err: t.Optional[BaseException] = None
+        for attempt in range(1, retries + 1):
+            try:
+                return await asyncio.wait_for(coro_factory(), timeout=timeout_s)
+            except asyncio.CancelledError:
+                # Allow gather()/TaskGroup to cancel cleanly
+                raise
+            except (asyncio.TimeoutError, TimeoutError) as e:
+                err = e
+            except Exception as e:
+                err = e
 
-            # Use the LLM provider's complete method
-            response = llm.complete(prompt)
-            self.explanation = str(response)
-
-        except Exception as e:
-            self.explanation = f"Error generating explanation: {str(e)}"
+            if attempt == retries:
+                if err is None:
+                    raise RuntimeError("Retry exhausted but no exception was captured")
+                raise err
+            await asyncio.sleep(backoff + random.random() * 0.25)
+            backoff *= 2

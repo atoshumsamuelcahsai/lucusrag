@@ -240,6 +240,7 @@ llma_vector_store_data*/
 
 # AST analysis results
 examples/
+ast_cache/
 
 # Additional secrets and config files
 secrets.json

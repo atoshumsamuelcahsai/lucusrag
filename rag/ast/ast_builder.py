@@ -6,20 +6,171 @@ import logging
 from rag.schemas.processed_files_tracker import ProgressState
 from rag.ast.builders import CodeParser, ASTParser, TreeSitterParser
 import asyncio
+from rag.schemas.code_element import CodeElement
 
 logger = logging.getLogger(__name__)
 
 
-def build_tree_python_files(
+def _save_element_to_file(
+    element: CodeElement, element_id: str, results_dir: Path
+) -> None:
+    """Save a CodeElement to a JSON file.
+
+    Args:
+        element: CodeElement to save
+        element_id: Unique identifier for the element
+        results_dir: Directory to save the file
+    """
+    element_file = (
+        results_dir / f"{element_id.replace('/', '_').replace(':', '_')}.json"
+    )
+    with open(element_file, "w", encoding="utf-8") as f:
+        json.dump(element.to_dict(), f, indent=2)
+
+
+async def _generate_explanation_with_rate_limit(
+    element: CodeElement,
+    llm_provider: str,
+    semaphore: asyncio.Semaphore,
+) -> None:
+    """Generate explanation for an element with rate limiting.
+
+    Args:
+        element: CodeElement to generate explanation for
+        llm_provider: LLM provider to use
+        semaphore: Semaphore for rate limiting
+    """
+    async with semaphore:
+        await element.generate_explanation(llm_provider)
+
+
+async def _process_single_element(
+    element: CodeElement,
+    element_id: str,
+    results_dir: Path,
+    progress_file: Path,
+    state: ProgressState,
+    generate_explanation: bool,
+    llm_provider: str,
+    semaphore: t.Optional[asyncio.Semaphore],
+) -> None:
+    """Process a single code element: generate explanation (if needed) and save to file.
+
+    Args:
+        element: CodeElement to process
+        element_id: Unique identifier for the element
+        results_dir: Directory to save JSON files
+        progress_file: Path to progress tracking file
+        state: ProgressState instance
+        generate_explanation: Whether to generate AI explanation
+        llm_provider: LLM provider for explanations
+        semaphore: Optional semaphore for rate limiting
+    """
+    try:
+        if generate_explanation:
+            if semaphore is None:
+                raise ValueError(
+                    "Semaphore is required when generate_explanation is True"
+                )
+            await _generate_explanation_with_rate_limit(
+                element, llm_provider, semaphore
+            )
+
+        _save_element_to_file(element, element_id, results_dir)
+        state.add_element(element_id, progress_file)
+    except Exception as e:
+        logger.exception(f"Error processing element {element_id}: {e}")
+        state.add_failed(element_id, progress_file)
+
+
+def _parse_python_file(file_path: Path, parser: CodeParser) -> t.List[CodeElement]:
+    """Parse a Python file and extract code elements.
+
+    Args:
+        file_path: Path to Python file
+        parser: CodeParser instance
+
+    Returns:
+        List of CodeElement instances
+
+    Raises:
+        Exception: If parsing fails
+    """
+    return parser.parse(file_path.read_text(), str(file_path))
+
+
+async def _process_elements_in_file(
+    elements: t.List[CodeElement],
+    results_dir: Path,
+    progress_file: Path,
+    state: ProgressState,
+    generate_explanations: bool,
+    llm_provider: str,
+    semaphore: t.Optional[asyncio.Semaphore],
+) -> None:
+    """Process all code elements in a file (concurrent or sequential).
+
+    Args:
+        elements: List of CodeElement instances to process
+        results_dir: Directory to save JSON files
+        progress_file: Path to progress tracking file
+        state: ProgressState instance
+        generate_explanations: Whether to generate explanations
+        llm_provider: LLM provider for explanations
+        semaphore: Optional semaphore for rate limiting
+    """
+    # Filter out already processed elements
+    elements_to_process = [
+        (element, element.id)
+        for element in elements
+        if not state.is_element_processed(element.id)
+    ]
+
+    if not elements_to_process:
+        return
+
+    if generate_explanations:
+        # Process concurrently with rate limiting
+        tasks = [
+            _process_single_element(
+                element=element,
+                element_id=element_id,
+                results_dir=results_dir,
+                progress_file=progress_file,
+                state=state,
+                generate_explanation=True,
+                llm_provider=llm_provider,
+                semaphore=semaphore,
+            )
+            for element, element_id in elements_to_process
+        ]
+        await asyncio.gather(*tasks, return_exceptions=True)
+    else:
+        # Process sequentially (no API calls, faster for I/O)
+        for element, element_id in elements_to_process:
+            await _process_single_element(
+                element=element,
+                element_id=element_id,
+                results_dir=results_dir,
+                progress_file=progress_file,
+                state=state,
+                generate_explanation=False,
+                llm_provider=llm_provider,
+                semaphore=None,
+            )
+
+
+async def build_tree_python_files(
     root_dir: str,
     parser: CodeParser,
     state: ProgressState,
     results_dir: Path,
     progress_file: Path,
     generate_explanations: bool = False,
-    llm_provider: str = "anthropic",
+    llm_provider: str = "openai",
+    max_concurrent: int = 5,
 ) -> None:
-    """Process Python files and extract code elements.
+    """Process Python files and extract code elements with concurrent explanation generation.
 
     Args:
         root_dir: Root directory containing Python files
@@ -29,8 +180,10 @@ def build_tree_python_files(
         progress_file: Path to progress JSON file
         generate_explanations: Whether to generate AI explanations
         llm_provider: LLM provider for explanations
+        max_concurrent: Maximum number of concurrent explanation requests (default: 5)
     """
-    # Process each Python file
+    semaphore = asyncio.Semaphore(max_concurrent) if generate_explanations else None
+
     for python_file_path in Path(root_dir).rglob("*.py"):
         python_file_path_str = str(python_file_path)
 
@@ -40,37 +193,21 @@ def build_tree_python_files(
         logger.info(f"Processing file: {python_file_path_str} .....")
 
         try:
-            code_elements = parser.parse(
-                python_file_path.read_text(), python_file_path_str
-            )
+            code_elements = _parse_python_file(python_file_path, parser)
         except Exception as e:
             logger.exception(f"Error parsing file {python_file_path_str}: {e}")
             continue
 
-        for element in code_elements:
-            element_id = f"{python_file_path_str}:{element.type}:{element.name}"
+        await _process_elements_in_file(
+            elements=code_elements,
+            results_dir=results_dir,
+            progress_file=progress_file,
+            state=state,
+            generate_explanations=generate_explanations,
+            llm_provider=llm_provider,
+            semaphore=semaphore,
+        )
 
-            if state.is_element_processed(element_id):
-                continue
-
-            try:
-                # Only generate explanation if flag is True
-                if generate_explanations:
-                    asyncio.run(element.generate_explanation(llm_provider))
-
-                # Save CodeElement
-                element_file = results_dir / f"{element_id.replace('/', '_')}.json"
-                with open(element_file, "w", encoding="utf-8") as f:
-                    json.dump(element.to_dict(), f, indent=2)
-
-                # Update progress using ProgressState methods
-                state.add_element(element_id, progress_file)
-
-            except Exception as e:
-                logger.exception(f"Error processing element {element_id}: {e}")
-                state.add_failed(element_id, progress_file)
-
-        # Mark file as complete using ProgressState method
         state.add_file(python_file_path_str, progress_file)
 
 
@@ -118,13 +255,14 @@ def setup_processed_directory(
     return results_dir, progress_file
 
 
-def analyze_and_store_python_files(
+async def analyze_and_store_python_files(
     root_dir: str,
     output_path: str = "./ast_cache",
     parser_type: str = "tree-sitter",
     generate_explanations: bool = False,
     llm_provider: str = "anthropic",
     project_module: str = "rag",
+    max_concurrent: int = 5,
 ) -> str:
     """Analyze Python files and extract code elements.
 
@@ -148,7 +286,7 @@ def analyze_and_store_python_files(
     state: ProgressState = ProgressState.from_file(progress_file)
 
     # Process all Python files
-    build_tree_python_files(
+    await build_tree_python_files(
         root_dir=root_dir,
         parser=parser,
         state=state,
@@ -156,6 +294,7 @@ def analyze_and_store_python_files(
         progress_file=progress_file,
         generate_explanations=generate_explanations,
         llm_provider=llm_provider,
+        max_concurrent=max_concurrent,
     )
 
     return str(results_dir.parent)
@@ -181,8 +320,11 @@ Examples:
   # With tree-sitter for better accuracy
   python ast_builder.py --root_dir rag/ --parser-type tree-sitter
   
-  # Generate AI explanations (requires Anthropic API key)
+  # Generate AI explanations (requires API key)
   python ast_builder.py --root_dir rag/ --generate-explanations
+  
+  # Generate explanations with higher concurrency (faster, but may hit rate limits)
+  python ast_builder.py --root_dir rag/ --generate-explanations --max-concurrent 10
         """,
     )
 
@@ -207,25 +349,34 @@ Examples:
     )
     parser.add_argument(
         "--llm-provider",
-        default="anthropic",
-        help="LLM provider for explanations (default: anthropic)",
+        default="openai",
+        help="LLM provider for explanations (default: openai)",
     )
     parser.add_argument(
         "--project-module",
         default="rag",
         help="Module prefix to filter dependencies (default: rag)",
     )
+    parser.add_argument(
+        "--max-concurrent",
+        type=int,
+        default=5,
+        help="Maximum concurrent explanation requests (default: 5, increase for faster processing)",
+    )
 
     args = parser.parse_args()
 
     try:
-        output_path = analyze_and_store_python_files(
-            root_dir=args.root_dir,
-            output_path=args.output_dir,
-            parser_type=args.parser_type,
-            generate_explanations=args.generate_explanations,
-            llm_provider=args.llm_provider,
-            project_module=args.project_module,
+        output_path = asyncio.run(
+            analyze_and_store_python_files(
+                root_dir=args.root_dir,
+                output_path=args.output_dir,
+                parser_type=args.parser_type,
+                generate_explanations=args.generate_explanations,
+                llm_provider=args.llm_provider,
+                project_module=args.project_module,
+                max_concurrent=args.max_concurrent,
+            )
         )
         logger.info("Analysis complete!")
         logger.info(f"Output saved to: {output_path}")

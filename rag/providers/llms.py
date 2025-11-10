@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 from dotenv import load_dotenv
 from llama_index.llms.anthropic import Anthropic
+from llama_index.llms.openai import OpenAI
 from enum import Enum
 import typing as t
 
@@ -18,9 +19,7 @@ class LLMProvider(Enum):
     HUGGINGFACE = "huggingface"
 
 
-def get_anthropic_llm(
-    number_of_tokens: int = 4096, temperature: float = 0
-) -> Anthropic:
+def get_anthropic_llm(number_of_tokens: int = 756, temperature: float = 0) -> Anthropic:
     """Return a configured Anthropic LLM"""
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
@@ -33,14 +32,26 @@ def get_anthropic_llm(
     )
 
 
-LLMFACTORY = t.Callable[..., Anthropic]
+def get_openai_llm(number_of_tokens: int = 756, temperature: float = 0) -> OpenAI:
+    """Return a configured OpenAI LLM"""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not set")
+    return OpenAI(api_key=api_key, max_tokens=number_of_tokens, temperature=temperature)
+
+
+# Union type for LLM factories that can return different LLM types
+LLMFACTORY = t.Callable[..., t.Union[Anthropic, OpenAI]]
 
 GET_LLM_PROVIDER: t.Mapping[LLMProvider, LLMFACTORY] = {
     LLMProvider.ANTHROPIC: get_anthropic_llm,
+    LLMProvider.OPENAI: get_openai_llm,
 }
 
 
-def get_llm(provider: t.Union[str, LLMProvider], **llm_kwargs: t.Any) -> Anthropic:
+def get_llm(
+    provider: t.Union[str, LLMProvider], **llm_kwargs: t.Any
+) -> t.Union[Anthropic, OpenAI]:
     """
     Resolve an LLM instance by provider name or enum.
 

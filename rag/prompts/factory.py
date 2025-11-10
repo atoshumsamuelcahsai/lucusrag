@@ -21,6 +21,9 @@ class Prompt:
 
 
 class PromptFactory:
+    _instance: t.Optional["PromptFactory"] = None
+    _instance_lock = asyncio.Lock()
+
     def __init__(self, prompt_dir: Path = PROMPT_DIR):
         self._dir = prompt_dir
         self._prompts: dict[str, Prompt] = {}
@@ -34,6 +37,17 @@ class PromptFactory:
             lstrip_blocks=True,
             enable_async=True,
         )
+
+    @classmethod
+    async def get_instance(cls) -> "PromptFactory":
+        if cls._instance is not None:
+            return cls._instance
+        async with cls._instance_lock:
+            if cls._instance is None:
+                inst = cls()
+                await inst.load_once()
+                cls._instance = inst
+            return cls._instance
 
     async def _load_file(self, p: Path) -> Prompt:
         async with aiofiles.open(p, mode="r", encoding="utf-8") as f:

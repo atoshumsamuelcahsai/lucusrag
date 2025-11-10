@@ -3,7 +3,7 @@
 import json
 import pytest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, AsyncMock
 from rag.ast.ast_builder import (
     build_tree_python_files,
     get_parser,
@@ -13,7 +13,6 @@ from rag.ast.ast_builder import (
 from rag.ast.builders import ASTParser, TreeSitterParser, CodeParser
 from rag.schemas.processed_files_tracker import ProgressState
 from rag.schemas.code_element import CodeElement
-from unittest.mock import AsyncMock
 
 
 class TestGetParser:
@@ -123,7 +122,8 @@ def hello():
         parser.parse.return_value = [element]
         return parser
 
-    def test_processes_python_files(
+    @pytest.mark.asyncio
+    async def test_processes_python_files(
         self, tmp_path, temp_python_file, mock_state, mock_parser
     ):
         """Test that Python files are processed."""
@@ -131,7 +131,7 @@ def hello():
         results_dir.mkdir()
         progress_file = tmp_path / "progress.json"
 
-        build_tree_python_files(
+        await build_tree_python_files(
             root_dir=str(tmp_path),
             parser=mock_parser,
             state=mock_state,
@@ -143,7 +143,8 @@ def hello():
         # Parser should have been called
         assert mock_parser.parse.called
 
-    def test_skips_already_processed_files(
+    @pytest.mark.asyncio
+    async def test_skips_already_processed_files(
         self, tmp_path, temp_python_file, mock_parser
     ):
         """Test that already processed files are skipped."""
@@ -154,7 +155,7 @@ def hello():
         results_dir.mkdir()
         progress_file = tmp_path / "progress.json"
 
-        build_tree_python_files(
+        await build_tree_python_files(
             root_dir=str(tmp_path),
             parser=mock_parser,
             state=state,
@@ -165,7 +166,8 @@ def hello():
         # Parser should NOT have been called
         assert not mock_parser.parse.called
 
-    def test_saves_element_json_files(
+    @pytest.mark.asyncio
+    async def test_saves_element_json_files(
         self, tmp_path, temp_python_file, mock_state, mock_parser
     ):
         """Test that element JSON files are created."""
@@ -173,7 +175,7 @@ def hello():
         results_dir.mkdir()
         progress_file = tmp_path / "progress.json"
 
-        build_tree_python_files(
+        await build_tree_python_files(
             root_dir=str(tmp_path),
             parser=mock_parser,
             state=mock_state,
@@ -185,7 +187,8 @@ def hello():
         json_files = list(results_dir.glob("*.json"))
         assert len(json_files) > 0
 
-    def test_updates_progress_state(
+    @pytest.mark.asyncio
+    async def test_updates_progress_state(
         self, tmp_path, temp_python_file, mock_state, mock_parser
     ):
         """Test that progress state is updated."""
@@ -193,7 +196,7 @@ def hello():
         results_dir.mkdir()
         progress_file = tmp_path / "progress.json"
 
-        build_tree_python_files(
+        await build_tree_python_files(
             root_dir=str(tmp_path),
             parser=mock_parser,
             state=mock_state,
@@ -205,7 +208,8 @@ def hello():
         assert mock_state.add_element.called
         assert mock_state.add_file.called
 
-    def test_handles_parse_errors(self, tmp_path, temp_python_file, mock_state):
+    @pytest.mark.asyncio
+    async def test_handles_parse_errors(self, tmp_path, temp_python_file, mock_state):
         """Test graceful handling of parse errors."""
         parser = Mock(spec=CodeParser)
         parser.parse.side_effect = Exception("Parse error")
@@ -215,7 +219,7 @@ def hello():
         progress_file = tmp_path / "progress.json"
 
         # Should not crash
-        build_tree_python_files(
+        await build_tree_python_files(
             root_dir=str(tmp_path),
             parser=parser,
             state=mock_state,
@@ -226,7 +230,8 @@ def hello():
         # File processing should continue despite error
         # (no assertions needed, just verify no crash)
 
-    def test_handles_element_processing_errors(
+    @pytest.mark.asyncio
+    async def test_handles_element_processing_errors(
         self, tmp_path, temp_python_file, mock_state, mock_parser
     ):
         """Test handling errors during element processing."""
@@ -238,7 +243,7 @@ def hello():
         progress_file = tmp_path / "progress.json"
 
         # Should not crash
-        build_tree_python_files(
+        await build_tree_python_files(
             root_dir=str(tmp_path),
             parser=mock_parser,
             state=mock_state,
@@ -249,7 +254,8 @@ def hello():
         # Should have tracked failure
         assert mock_state.add_failed.called
 
-    def test_skips_already_processed_elements(
+    @pytest.mark.asyncio
+    async def test_skips_already_processed_elements(
         self, tmp_path, temp_python_file, mock_parser
     ):
         """Test that already processed elements are skipped."""
@@ -261,7 +267,7 @@ def hello():
         results_dir.mkdir()
         progress_file = tmp_path / "progress.json"
 
-        build_tree_python_files(
+        await build_tree_python_files(
             root_dir=str(tmp_path),
             parser=mock_parser,
             state=state,
@@ -332,11 +338,12 @@ def add(a, b):
         )
         return tmp_path
 
-    def test_returns_output_path(self, temp_project, tmp_path):
+    @pytest.mark.asyncio
+    async def test_returns_output_path(self, temp_project, tmp_path):
         """Test that output path is returned."""
         output_dir = tmp_path / "output"
 
-        result = analyze_and_store_python_files(
+        result = await analyze_and_store_python_files(
             root_dir=str(temp_project),
             output_path=str(output_dir),
             parser_type="ast",
@@ -345,11 +352,12 @@ def add(a, b):
         assert result == str(output_dir)
         assert output_dir.exists()
 
-    def test_creates_results_directory(self, temp_project, tmp_path):
+    @pytest.mark.asyncio
+    async def test_creates_results_directory(self, temp_project, tmp_path):
         """Test that results directory is created."""
         output_dir = tmp_path / "output"
 
-        analyze_and_store_python_files(
+        await analyze_and_store_python_files(
             root_dir=str(temp_project),
             output_path=str(output_dir),
             parser_type="ast",
@@ -358,11 +366,12 @@ def add(a, b):
         results_dir = output_dir / "results_ast"
         assert results_dir.exists()
 
-    def test_creates_progress_file(self, temp_project, tmp_path):
+    @pytest.mark.asyncio
+    async def test_creates_progress_file(self, temp_project, tmp_path):
         """Test that progress file is created."""
         output_dir = tmp_path / "output"
 
-        analyze_and_store_python_files(
+        await analyze_and_store_python_files(
             root_dir=str(temp_project),
             output_path=str(output_dir),
             parser_type="ast",
@@ -371,11 +380,12 @@ def add(a, b):
         progress_file = output_dir / "progress.json"
         assert progress_file.exists()
 
-    def test_processes_python_files(self, temp_project, tmp_path):
+    @pytest.mark.asyncio
+    async def test_processes_python_files(self, temp_project, tmp_path):
         """Test that Python files are processed."""
         output_dir = tmp_path / "output"
 
-        analyze_and_store_python_files(
+        await analyze_and_store_python_files(
             root_dir=str(temp_project),
             output_path=str(output_dir),
             parser_type="ast",
@@ -386,12 +396,13 @@ def add(a, b):
         json_files = list(results_dir.glob("*.json"))
         assert len(json_files) > 0
 
-    def test_uses_ast_parser_by_default(self, temp_project, tmp_path):
+    @pytest.mark.asyncio
+    async def test_uses_ast_parser_by_default(self, temp_project, tmp_path):
         """Test that AST parser is used when not specified."""
         output_dir = tmp_path / "output"
 
         # Default parser_type is "tree-sitter"
-        analyze_and_store_python_files(
+        await analyze_and_store_python_files(
             root_dir=str(temp_project),
             output_path=str(output_dir),
         )
@@ -400,11 +411,12 @@ def add(a, b):
         results_dir = output_dir / "results_tree-sitter"
         assert results_dir.exists()
 
-    def test_uses_tree_sitter_parser(self, temp_project, tmp_path):
+    @pytest.mark.asyncio
+    async def test_uses_tree_sitter_parser(self, temp_project, tmp_path):
         """Test using tree-sitter parser."""
         output_dir = tmp_path / "output"
 
-        analyze_and_store_python_files(
+        await analyze_and_store_python_files(
             root_dir=str(temp_project),
             output_path=str(output_dir),
             parser_type="tree-sitter",
@@ -413,12 +425,13 @@ def add(a, b):
         results_dir = output_dir / "results_tree-sitter"
         assert results_dir.exists()
 
-    def test_invalid_parser_type_raises_error(self, temp_project, tmp_path):
+    @pytest.mark.asyncio
+    async def test_invalid_parser_type_raises_error(self, temp_project, tmp_path):
         """Test that invalid parser type raises ValueError."""
         output_dir = tmp_path / "output"
 
         with pytest.raises(ValueError, match="Unknown parser type"):
-            analyze_and_store_python_files(
+            await analyze_and_store_python_files(
                 root_dir=str(temp_project),
                 output_path=str(output_dir),
                 parser_type="invalid",
@@ -464,7 +477,8 @@ def func():
             if data.get("dependencies"):
                 assert all(dep.startswith("myproject") for dep in data["dependencies"])
 
-    def test_generates_explanations_when_requested(self, temp_project, tmp_path):
+    @pytest.mark.asyncio
+    async def test_generates_explanations_when_requested(self, temp_project, tmp_path):
         """Test that explanations are generated when requested."""
         output_dir = tmp_path / "output"
 
@@ -472,7 +486,7 @@ def func():
             "rag.schemas.code_element.CodeElement.generate_explanation",
             new_callable=AsyncMock,
         ):
-            analyze_and_store_python_files(
+            await analyze_and_store_python_files(
                 root_dir=str(temp_project),
                 output_path=str(output_dir),
                 parser_type="ast",
@@ -481,14 +495,16 @@ def func():
 
         # No exception means test passed
 
-    def test_uses_custom_llm_provider(self, temp_project, tmp_path):
+    @pytest.mark.asyncio
+    async def test_uses_custom_llm_provider(self, temp_project, tmp_path):
         """Test using custom LLM provider."""
         output_dir = tmp_path / "output"
 
         with patch(
-            "rag.schemas.code_element.CodeElement.generate_explanation"
+            "rag.schemas.code_element.CodeElement.generate_explanation",
+            new_callable=AsyncMock,
         ) as mock_gen:
-            analyze_and_store_python_files(
+            await analyze_and_store_python_files(
                 root_dir=str(temp_project),
                 output_path=str(output_dir),
                 parser_type="ast",
@@ -500,12 +516,13 @@ def func():
             if mock_gen.called:
                 mock_gen.assert_called_with("openai")
 
-    def test_incremental_processing(self, temp_project, tmp_path):
+    @pytest.mark.asyncio
+    async def test_incremental_processing(self, temp_project, tmp_path):
         """Test that processing is incremental."""
         output_dir = tmp_path / "output"
 
         # First run
-        analyze_and_store_python_files(
+        await analyze_and_store_python_files(
             root_dir=str(temp_project),
             output_path=str(output_dir),
             parser_type="ast",
@@ -515,7 +532,7 @@ def func():
         first_run_files = len(list(results_dir.glob("*.json")))
 
         # Second run (should skip already processed files)
-        analyze_and_store_python_files(
+        await analyze_and_store_python_files(
             root_dir=str(temp_project),
             output_path=str(output_dir),
             parser_type="ast",
@@ -526,14 +543,15 @@ def func():
         # Should not have duplicated files
         assert first_run_files == second_run_files
 
-    def test_handles_empty_directory(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_handles_empty_directory(self, tmp_path):
         """Test handling empty directory."""
         empty_dir = tmp_path / "empty"
         empty_dir.mkdir()
         output_dir = tmp_path / "output"
 
         # Should not crash
-        result = analyze_and_store_python_files(
+        result = await analyze_and_store_python_files(
             root_dir=str(empty_dir),
             output_path=str(output_dir),
             parser_type="ast",
@@ -541,7 +559,8 @@ def func():
 
         assert result == str(output_dir)
 
-    def test_handles_non_python_files(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_handles_non_python_files(self, tmp_path):
         """Test that non-Python files are ignored."""
         project_dir = tmp_path / "project"
         project_dir.mkdir()
@@ -553,7 +572,7 @@ def func():
         output_dir = tmp_path / "output"
 
         # Should not crash
-        analyze_and_store_python_files(
+        await analyze_and_store_python_files(
             root_dir=str(project_dir),
             output_path=str(output_dir),
             parser_type="ast",
