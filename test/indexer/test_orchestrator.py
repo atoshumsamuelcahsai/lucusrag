@@ -36,7 +36,12 @@ def temp_ast_dir(tmp_path):
 @pytest.fixture
 def indexer(temp_ast_dir):
     """Create a CodeGraphIndexer instance."""
-    return CodeGraphIndexer(ast_cache_dir=str(temp_ast_dir), top_k=3)
+    manifest_path = temp_ast_dir / ".rag_manifest.json"
+    return CodeGraphIndexer(
+        ast_cache_dir=str(temp_ast_dir),
+        top_k=3,
+        manifest_path=str(manifest_path),
+    )
 
 
 class TestCodeGraphIndexer:

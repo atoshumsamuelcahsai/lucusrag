@@ -16,7 +16,7 @@ from rag.indexer.vector_indexer import (
     create_vector_index_from_existing_nodes,
     graph_configure_settings,
 )
-from rag.engine.engine import make_query_engine
+from rag.engine.engine import make_query_engine, retrieve_documents_from_engine
 from rag.schemas.vector_config import VectorIndexConfig
 
 import logging
@@ -59,9 +59,9 @@ class CodeGraphIndexer:
     def __init__(
         self,
         ast_cache_dir: str,
-        manifest_path: Optional[str] = None,
         schema_version: int = 1,
         top_k: int = 5,
+        manifest_path: Optional[str] = ".../ast_cache/.rag_manifest.json",
     ) -> None:
 
         self.ast_dir = Path(ast_cache_dir)
@@ -186,6 +186,27 @@ class CodeGraphIndexer:
             raise RuntimeError("Indexer not built. Call build() or refresh() first.")
         resp = await self._engine.aquery(text)
         return str(resp)
+
+    async def retrieve_documents(self, query: str, k: int = 20) -> list[Dict[str, Any]]:
+        """Retrieve top-k documents for a query without LLM processing.
+
+        Uses the engine's retrieval function to get raw retrieval results.
+        This is useful for evaluation purposes.
+
+        Args:
+            query: Query string to search for
+            k: Number of documents to retrieve (default: 20)
+
+        Returns:
+            List of dicts with retrieval results (see engine.retrieve_documents_from_engine)
+
+        Raises:
+            RuntimeError: If engine is not initialized
+        """
+        if self._engine is None:
+            raise RuntimeError("Indexer not built. Call build() or refresh() first.")
+
+        return await retrieve_documents_from_engine(self._engine, query, k)
 
     async def _get_graph_config(self) -> None:
         await graph_configure_settings()

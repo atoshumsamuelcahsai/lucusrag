@@ -37,7 +37,6 @@ class CodeElement:
     def to_dict(self) -> dict:
         """Convert CodeElement to a dictionary representation."""
         return {
-            "id": self.id,
             "type": self.type,
             "name": self.name,
             "docstring": self.docstring,

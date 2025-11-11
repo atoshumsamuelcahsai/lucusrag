@@ -324,8 +324,32 @@ class GraphDBManager:
         rows: list[dict],
         vector_config: VectorIndexConfig,
     ) -> int:
+        """
+        Upsert embeddings and serialized node data.
+
+        Each row should contain:
+        - id: node identifier
+        - vec: embedding vector
+        - text: text content
+        - metadata: dict with node metadata (will be stored as _node_content JSON string)
+        """
+        import json
+
         label = vector_config.node_label
         prop = vector_config.vector_property
+
+        # Serialize metadata to JSON strings for Neo4j storage
+        serialized_rows = []
+        for row in rows:
+            serialized_row = {
+                "id": row["id"],
+                "vec": row["vec"],
+                "text": row["text"],
+                "metadata_json": json.dumps(
+                    row.get("metadata", {})
+                ),  # Serialize as JSON string
+            }
+            serialized_rows.append(serialized_row)
 
         def _write(tx: ManagedTransaction, /) -> int:
             result = tx.run(
@@ -334,10 +358,11 @@ class GraphDBManager:
                 MATCH (n:{label} {{ id: row.id }})
                 SET n.{prop} = row.vec,
                     n.text = row.text,
+                    n._node_content = row.metadata_json,
                     n.updated_at = timestamp()
                 RETURN count(n) as updated
                 """,
-                {"rows": rows},
+                {"rows": serialized_rows},
             )
             record = result.single()
             return record["updated"] if record else 0

@@ -33,12 +33,15 @@ class TestGraphConfigureSettings:
             mock_embed.return_value = Mock()
             mock_llm.return_value = Mock()
 
-            await graph_configure_settings(
-                num_output=512,
-                context_window=2048,
-                llm_provider="anthropic",
-                embedding_provider="voyage",
-            )
+            # Set environment variables for test
+            import os
+
+            os.environ["LLM_PROVIDER"] = "anthropic"
+            os.environ["EMBEDDING_PROVIDER"] = "voyage"
+            os.environ["LLM_MAX_OUTPUT_TOKENS"] = "512"
+            os.environ["LLM_CONTEXT_WINDOW"] = "2048"
+
+            await graph_configure_settings()
 
             # Verify LLM was configured
             mock_llm.assert_called_once_with("anthropic")

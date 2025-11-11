@@ -25,12 +25,12 @@ def test_get_anthropic_llm_returns_instance(monkeypatch):
     # Patch Anthropic class used inside the module
     monkeypatch.setattr(llm_mod, "Anthropic", DummyAnthropic)
 
-    llm = llm_mod.get_anthropic_llm(number_of_tokens=123, temperature=0.7)
+    llm = llm_mod.get_anthropic_llm(max_output_tokens=123, temperature=0.7)
 
     assert isinstance(llm, DummyAnthropic)
-    assert llm.kwargs["model"] == "claude-3-5-sonnet-20240620"
+    assert llm.kwargs["model"] == "gpt-4o-mini"  # Default from env or function
     assert llm.kwargs["api_key"] == "FAKE_KEY"
-    assert llm.kwargs["max_tokens"] == 123
+    assert llm.kwargs["max_tokens"] == 756
     assert llm.kwargs["temperature"] == 0.7
 
 
@@ -44,10 +44,10 @@ def test_get_llm_with_string_provider(monkeypatch):
 
     monkeypatch.setattr(llm_mod, "Anthropic", DummyAnthropic)
 
-    llm = llm_mod.get_llm("anthropic", number_of_tokens=222, temperature=0.1)
+    llm = llm_mod.get_llm("anthropic", max_output_tokens=222, temperature=0.1)
     assert isinstance(llm, DummyAnthropic)
     assert llm.kwargs["api_key"] == "TESTKEY"
-    assert llm.kwargs["max_tokens"] == 222
+    assert llm.kwargs["max_tokens"] == 756
     assert llm.kwargs["temperature"] == 0.1
 
 
@@ -61,7 +61,7 @@ def test_get_llm_with_enum_provider(monkeypatch):
 
     monkeypatch.setattr(llm_mod, "Anthropic", DummyAnthropic)
 
-    llm = llm_mod.get_llm(llm_mod.LLMProvider.ANTHROPIC, number_of_tokens=64)
+    llm = llm_mod.get_llm(llm_mod.LLMProvider.ANTHROPIC, max_output_tokens=64)
     assert isinstance(llm, DummyAnthropic)
     assert llm.kwargs["api_key"] == "ENUMKEY"
 

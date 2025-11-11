@@ -9,8 +9,11 @@ This module handles Phase 3 of the pipeline:
 
 import logging
 import asyncio
+import os
+import typing as t
+from dotenv import load_dotenv
 
-from rag.providers import get_llm, get_embeddings, EmbeddingProvider
+from rag.providers import get_llm, get_embeddings
 from rag.parser import parse_documents_to_nodes
 from rag.schemas.vector_config import VectorIndexConfig
 from llama_index.core import Settings
@@ -18,7 +21,8 @@ from llama_index.core import VectorStoreIndex
 from llama_index.graph_stores.neo4j import Neo4jGraphStore
 from llama_index.vector_stores.neo4jvector import Neo4jVectorStore
 
-import typing as t
+# Load environment variables
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +31,20 @@ _settings_configured = False
 _settings_lock = asyncio.Lock()
 
 
-async def graph_configure_settings(
-    num_output: int = 420,
-    context_window: int = 4200,
-    llm_provider: str = "anthropic",
-    embedding_provider: str = "voyage",
-) -> None:
-    """Configure the settings for the graph."""
+async def graph_configure_settings() -> None:
+    """Configure the settings for the graph.
+
+    All configuration comes from environment variables:
+    - LLM_PROVIDER: Which LLM provider to use (anthropic/openai, default: anthropic)
+    - EMBEDDING_PROVIDER: Which embedding provider to use (default: voyage)
+    - LLM_MAX_OUTPUT_TOKENS: Maximum output tokens (default: 768)
+    - LLM_CONTEXT_WINDOW: Context window size (default: 4200)
+    """
+    llm_provider = os.getenv("LLM_PROVIDER", "anthropic")
+    embedding_provider = os.getenv("EMBEDDING_PROVIDER", "voyage")
+    num_output = int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "768"))
+    context_window = int(os.getenv("LLM_CONTEXT_WINDOW", "4200"))
+
     global _settings_configured
     if _settings_configured:
         return
@@ -42,9 +53,7 @@ async def graph_configure_settings(
             return
         logger.info("Configuring LlamaIndex Settings....")
 
-        embedding_model = get_embeddings(
-            provider=EmbeddingProvider(embedding_provider).value
-        )
+        embedding_model = get_embeddings(provider=embedding_provider)
         Settings.llm = get_llm(llm_provider)
         Settings.embed_model = embedding_model
         Settings.node_parser = parse_documents_to_nodes  # type: ignore[assignment]
@@ -52,15 +61,17 @@ async def graph_configure_settings(
         Settings.context_window = context_window
 
         _settings_configured = True
-        logger.info("LlamaIndex Settings configured successfully.")
+        logger.info(
+            f"LlamaIndex Settings configured. Provider: {llm_provider}, Model: {os.getenv('LLM_MODEL', 'default')}"
+        )
 
 
-def _graph_configure_settings_blocking(**kw) -> None:  # type: ignore
+def _graph_configure_settings_blocking() -> None:
     """Call the async settings config from sync code safely."""
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        asyncio.run(graph_configure_settings(**kw))
+        asyncio.run(graph_configure_settings())
     else:
         # If caller is already async, they should await the async variant.
         # We don't change the public API here, just log.
@@ -103,6 +114,7 @@ def create_vector_index_from_existing_nodes(
         password=neo4j_password,
         index_name=vector_config.name,
         node_label=vector_config.node_label,
+        store_nodes=True,
         embedding_dimension=vector_config.dimension,
         similarity_metric=vector_config.similarity_metric,
         text_node_property="text",

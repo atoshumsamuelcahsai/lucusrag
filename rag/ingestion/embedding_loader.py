@@ -44,7 +44,15 @@ def populate_embeddings(
         text = create_text_representation(doc.metadata)
         try:
             vec = embed_model.get_text_embedding(text)
-            payload.append({"id": node_id, "text": text, "vec": vec})
+            # Include metadata for _node_content field that LlamaIndex needs
+            payload.append(
+                {
+                    "id": node_id,
+                    "text": text,
+                    "vec": vec,
+                    "metadata": doc.metadata,  # Store full metadata for node reconstruction
+                }
+            )
         except Exception:
             logger.exception("Embedding failed for id=%s", node_id)
 

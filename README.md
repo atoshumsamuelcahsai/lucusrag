@@ -87,14 +87,20 @@ NODE_LABEL=LucusCodeElement
 VECTOR_PROPERTY=embedding
 SIMILARITY_METRIC=cosine
 
-# LLM Configuration
-LLM_PROVIDER=anthropic
-EMBEDDING_PROVIDER=voyage
+# LLM Configuration (single source of truth)
+LLM_PROVIDER=anthropic  # Options: anthropic, openai
+LLM_MODEL=claude-3-5-sonnet  # Model name (e.g., claude-3-5-sonnet, gpt-4, gpt-4-turbo)
+LLM_TEMPERATURE=0  # Optional, default: 0
+LLM_MAX_OUTPUT_TOKENS=768  # Maximum output tokens (default: 768)
+LLM_CONTEXT_WINDOW=4200  # Optional, default: 4200
+
+# Embedding Configuration
+EMBEDDING_PROVIDER=voyage  # Options: voyage, voyage-large, voyage-lite, text-embedding-3-small
 
 # API Keys (add your keys)
 ANTHROPIC_API_KEY=your_key_here
 VOYAGE_API_KEY=your_key_here
-OPENAI_API_KEY=your_key_here  # Optional
+OPENAI_API_KEY=your_key_here  # Optional, required if using OpenAI LLM or embeddings
 ```
 
 ### 6. Start Neo4j with Docker Compose
