@@ -187,7 +187,7 @@ def to_node(code_info: CodeElement) -> TextNode:
     }
     metadata = {k: v for k, v in metadata.items() if v not in (None, "", [])}
 
-    return TextNode(text=text_content, metadata=metadata)
+    return TextNode(text=text_content, metadata=metadata, id_=code_info.id)
 
 
 def parse_documents_to_nodes(

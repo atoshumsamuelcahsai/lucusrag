@@ -21,20 +21,35 @@ logger = logging.getLogger(__name__)
 def _process_ast_files(
     ast_cache_dir: Path,
 ) -> t.Tuple[t.List[Document], t.List[CodeElement]]:
-    """Process AST files into documents and code elements."""
+    """Process AST files into documents and code elements.
+
+    Only processes code element JSON files from results_* subdirectories.
+    """
     documents: t.List[Document] = []
     code_infos: t.List[CodeElement] = []
 
     logger.info(f"Scanning AST directory: {ast_cache_dir}")
     json_files = list(ast_cache_dir.rglob("*.json"))
-    logger.info(f"Found {len(json_files)} JSON files")
+    logger.info(f"Found {len(json_files)} JSON files (before filtering)")
 
-    for json_file in json_files:
+    # Filter out metadata files and only process files in results_* directories
+    code_element_files = [
+        f
+        for f in json_files
+        if f.name not in [".rag_manifest.json", "progress.json"]
+        and any(part.startswith("results_") for part in f.parts)
+    ]
+    logger.info(f"Processing {len(code_element_files)} code element files")
+
+    for json_file in code_element_files:
         data = None
         try:
-            logger.info(f"Processing file: {json_file}")
+            logger.debug(f"Processing file: {json_file}")
             with open(json_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
+
+                # Remove computed 'id' field if present (it's a property, not a constructor arg)
+                data.pop("id", None)
 
                 # Robust defaults for optional fields
                 data["parameters"] = data.get("parameters", [])
@@ -52,7 +67,7 @@ def _process_ast_files(
                 code_infos.append(code_info)
 
         except Exception as e:
-            logger.exception(f"Error processing {json_file}: {str(e)}")
+            logger.error(f"Error processing {json_file}: {str(e)}")
             if data is None:
                 logger.debug(
                     f"No data loaded for {json_file} (failed before Json parser)"
@@ -122,7 +137,7 @@ def process_code_files(
     db_manager: t.Optional[GraphDBManager] = None,
     vector_config: t.Optional[VectorIndexConfig] = None,
     force_rebuild_graph: bool = False,
-) -> int:
+) -> t.List[Document]:
     """
     Load AST-derived JSON files, optionally populate Neo4j, and return documents (llama_index.Document).
 
@@ -174,7 +189,7 @@ def process_code_files(
             f"Processed AST directory {path} in"
             f"{elapsed}s ({len(documents)} documents)."
         )
-        return len(documents)
+        return documents
 
     finally:
         db_manager.close()

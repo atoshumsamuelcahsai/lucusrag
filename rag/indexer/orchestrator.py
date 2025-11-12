@@ -61,7 +61,7 @@ class CodeGraphIndexer:
         ast_cache_dir: str,
         schema_version: int = 1,
         top_k: int = 5,
-        manifest_path: Optional[str] = ".../ast_cache/.rag_manifest.json",
+        manifest_path: Optional[str] = None,
     ) -> None:
 
         self.ast_dir = Path(ast_cache_dir)
@@ -93,11 +93,13 @@ class CodeGraphIndexer:
         logger.info(
             "Building graph structure (nodes + relationships + populate if empty)..."
         )
-        _num_docs = process_code_files(str(self.ast_dir))
-        logger.info(f"Graph structure built with {_num_docs} nodes")
+        docs = process_code_files(str(self.ast_dir))
+        logger.info(f"Graph structure built with {len(docs)} nodes")
 
         logger.info("Getting vector index from existing nodes…")
-        self._index = create_vector_index_from_existing_nodes(config)
+        # Parse AST docs once and pass them down so vector_indexer can hydrate docstore cleanly
+
+        self._index = create_vector_index_from_existing_nodes(config, docs=docs)
         logger.info("Vector index created successfully!!!")
 
         await self._update_manifest(config)
@@ -109,7 +111,7 @@ class CodeGraphIndexer:
         dt = time.perf_counter() - t0
         logger.info(f"Cold build successfully finished in {dt:.2f}s")
         return BuildResult(
-            documents=_num_docs,
+            documents=len(docs),
             elapsed_s=dt,
             mode=Mode.BUILD,
             schema_version=self.schema_version,
@@ -149,20 +151,20 @@ class CodeGraphIndexer:
 
         # Phase 1: Rebuild graph structure (force rebuild)
         logger.info("Rebuilding graph structure...")
-        docs_len = process_code_files(str(self.ast_dir), force_rebuild_graph=True)
+        docs = process_code_files(str(self.ast_dir), force_rebuild_graph=True)
 
         await self._save_manifest(now, embed_sig=self._embed_signature(config))
         logger.info("Manifest files updated successfully!!!")
 
         # Phase 2: Recreate vector index
-        self._index = create_vector_index_from_existing_nodes(config)
+        self._index = create_vector_index_from_existing_nodes(config, docs=docs)
         self._engine = make_query_engine(self._index, k=self.top_k)
         logger.info("Vector index recreated successfully")
 
         dt = time.perf_counter() - t0
         logger.info(f"Refresh successfully finished in {dt:.2f}s")
         return BuildResult(
-            documents=docs_len,
+            documents=len(docs),
             elapsed_s=dt,
             mode=Mode.REFRESH,
             schema_version=self.schema_version,

@@ -17,7 +17,8 @@ from rag.providers import get_llm, get_embeddings
 from rag.parser import parse_documents_to_nodes
 from rag.schemas.vector_config import VectorIndexConfig
 from llama_index.core import Settings
-from llama_index.core import VectorStoreIndex
+from llama_index.core import VectorStoreIndex, Document
+from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.graph_stores.neo4j import Neo4jGraphStore
 from llama_index.vector_stores.neo4jvector import Neo4jVectorStore
 
@@ -80,6 +81,7 @@ def _graph_configure_settings_blocking() -> None:
 
 def create_vector_index_from_existing_nodes(
     vector_config: t.Optional[VectorIndexConfig] = None,
+    docs: list[Document] | None = None,
 ) -> VectorStoreIndex:
     """
     Create vector index from existing Neo4j nodes with embeddings.
@@ -89,17 +91,30 @@ def create_vector_index_from_existing_nodes(
     - Does NOT generate embeddings
     - Only creates a VectorStoreIndex that points to existing nodes
     - Uses existing embeddings and relationships
+    - Hydrates in-memory docstore for BM25/keyword retrievers
 
     Args:
         vector_config: Vector index configuration (loads from env if None)
+        ast_cache_dir: Path to AST cache (currently unused, kept for backward compat)
+        docs: List of Documents from process_code_files (REQUIRED for BM25 support)
 
     Returns:
-        VectorStoreIndex configured to use existing Neo4j data
+        VectorStoreIndex configured to use existing Neo4j data with populated docstore
+
+    Raises:
+        ValueError: If docs is None or empty
     """
     if vector_config is None:
         vector_config = VectorIndexConfig.from_env()
 
     _graph_configure_settings_blocking()
+
+    # Validate docs parameter
+    if not docs:
+        raise ValueError(
+            "docs parameter is required for BM25 support. "
+            "Pass the documents returned from process_code_files()."
+        )
 
     logger.info("Creating vector index from existing nodes...")
 
@@ -134,10 +149,25 @@ def create_vector_index_from_existing_nodes(
         edge_relation_property="RELATES_TO",
     )
 
-    # Create index from existing nodes (no document processing needed)
+    # Hydrate docstore with nodes for BM25 and keyword retrievers
+    logger.info(f"Parsing {len(docs)} documents into nodes for docstore...")
+    nodes_to_store = parse_documents_to_nodes(docs)
+    docstore = SimpleDocumentStore()
+    docstore.add_documents(nodes_to_store)
+    logger.info(
+        f"Hydrated docstore with {len(nodes_to_store)} nodes for keyword retrievers."
+    )
+
+    # Create index from existing Neo4j vector store; then attach docstore + graph_store for hybrid use
     index = VectorStoreIndex.from_vector_store(
         vector_store=vector_store,
-        graph_store=graph_store,
+        show_progress=False,
+    )
+    # Manually attach stores needed by BM25 and graph operations
+    setattr(index, "_docstore", docstore)
+    setattr(index, "_graph_store", graph_store)
+    logger.info(
+        f"Index created. Docstore manually attached with {len(index.docstore.docs)} nodes for BM25."
     )
 
     logger.info("Vector index created successfully from existing nodes")

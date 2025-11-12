@@ -1,439 +1,311 @@
 [
   {
-    "query": "What is the VoyageEmbedding class used for?",
-    "difficulty": "easy",
-    "category": "simple_lookup",
-    "relevant_files": [
-      "rag/providers/embeddings.py"
-    ],
-    "relevant_elements": [
-      "rag.providers.embeddings._make_voyage_lite",
-      "rag.providers.embeddings._make_voyage_large",
-      "rag.providers.embeddings.get_embeddings"
-    ]
-  },
-  {
-    "query": "How do I configure Neo4j connection?",
-    "difficulty": "easy",
-    "category": "configuration",
-    "relevant_files": [
-      "rag/schemas/vector_config.py"
-    ],
-    "relevant_elements": [
-      "rag.schemas.vector_config.Neo4jConfig",
-      "rag.schemas.vector_config.VectorIndexConfig"
-    ]
-  },
-  {
-    "query": "What does the health check endpoint return?",
-    "difficulty": "easy",
-    "category": "api_endpoint",
-    "relevant_files": [
-      "server.py"
-    ],
-    "relevant_elements": [
-      "server.health_check"
-    ]
-  },
-  {
-    "query": "What is the CodeElement dataclass?",
+    "query": "What is the CodeElement class and what does it represent?",
     "difficulty": "easy",
     "category": "data_model",
-    "relevant_files": [
-      "rag/schemas/code_element.py"
-    ],
     "relevant_elements": [
       "rag.schemas.code_element.CodeElement"
     ]
   },
   {
-    "query": "How do I get an Anthropic LLM instance?",
-    "difficulty": "easy",
-    "category": "provider_usage",
-    "relevant_files": [
-      "rag/providers/llms.py"
-    ],
-    "relevant_elements": [
-      "rag.providers.llms.get_anthropic_llm",
-      "rag.providers.llms.get_llm"
-    ]
-  },
-  {
-    "query": "What LLM providers are supported?",
-    "difficulty": "easy",
-    "category": "enumeration",
-    "relevant_files": [
-      "rag/providers/llms.py"
-    ],
-    "relevant_elements": [
-      "rag.providers.llms.LLMProvider",
-      "rag.providers.llms.get_llm"
-    ]
-  },
-  {
-    "query": "What is the GraphDBManager class?",
+    "query": "What is the GraphDBManager class used for?",
     "difficulty": "easy",
     "category": "database",
-    "relevant_files": [
-      "rag/db/graph_db.py"
-    ],
     "relevant_elements": [
       "rag.db.graph_db.GraphDBManager"
     ]
   },
   {
-    "query": "What parsers are available for code?",
+    "query": "How do I get an LLM instance in the system?",
     "difficulty": "easy",
-    "category": "parsing",
-    "relevant_files": [
-      "rag/ast/builders.py"
-    ],
+    "category": "provider_usage",
     "relevant_elements": [
-      "rag.ast.builders.ASTParser",
-      "rag.ast.builders.TreeSitterParser"
+      "rag.providers.llms.get_llm"
+    ]
+  },
+  {
+    "query": "What embedding providers are supported?",
+    "difficulty": "easy",
+    "category": "providers",
+    "relevant_elements": [
+      "rag.providers.embeddings.EmbeddingProvider",
+      "rag.providers.embeddings.get_embeddings"
+    ]
+  },
+  {
+    "query": "What is the ProgressTracker class?",
+    "difficulty": "easy",
+    "category": "utility",
+    "relevant_elements": [
+      "rag.schemas.progress_tracker.ProgressTracker"
+    ]
+  },
+  {
+    "query": "How do I configure the Neo4j vector index?",
+    "difficulty": "easy",
+    "category": "configuration",
+    "relevant_elements": [
+      "rag.schemas.vector_config.VectorIndexConfig"
     ]
   },
   {
     "query": "What is the QueryProcessingError exception?",
     "difficulty": "easy",
     "category": "error_handling",
-    "relevant_files": [
-      "rag/exceptions/__init__.py"
-    ],
     "relevant_elements": [
-      "rag.exceptions.QueryProcessingError"
+      "rag.exceptions.__init__.QueryProcessingError"
     ]
   },
   {
-    "query": "How do I create a progress tracker?",
+    "query": "What is the PromptFactory class?",
     "difficulty": "easy",
-    "category": "utility",
-    "relevant_files": [
-      "rag/schemas/progress_tracker.py"
-    ],
+    "category": "prompts",
     "relevant_elements": [
-      "rag.schemas.progress_tracker.ProgressTracker"
+      "rag.prompts.factory.PromptFactory"
     ]
   },
   {
-    "query": "How are code elements converted to graph nodes?",
-    "difficulty": "medium",
-    "category": "transformation",
-    "relevant_files": [
-      "rag/parser/parser.py",
-      "rag/schemas/code_element.py"
-    ],
+    "query": "What code parsers are available?",
+    "difficulty": "easy",
+    "category": "parsing",
     "relevant_elements": [
-      "rag.parser.parser.to_node",
-      "rag.parser.parser.create_text_representation",
-      "rag.schemas.code_element.CodeElement.to_dict"
+      "rag.ast.builders.ASTParser",
+      "rag.ast.builders.TreeSitterParser"
     ]
   },
   {
-    "query": "How does the query processing pipeline work?",
+    "query": "How do I format function parameters for display?",
+    "difficulty": "easy",
+    "category": "formatting",
+    "relevant_elements": [
+      "rag.parser.parser.format_parameters"
+    ]
+  },
+  {
+    "query": "How are embeddings generated from different providers?",
     "difficulty": "medium",
-    "category": "pipeline_flow",
-    "relevant_files": [
-      "rag/query_processor.py",
-      "rag/indexer/orchestrator.py",
-      "rag/engine/engine.py"
-    ],
+    "category": "embeddings",
+    "relevant_elements": [
+      "rag.providers.embeddings.get_embeddings",
+      "rag.providers.embeddings._make_openai",
+      "rag.providers.embeddings._make_voyage",
+      "rag.providers.embeddings._make_voyage_lite"
+    ]
+  },
+  {
+    "query": "How does query processing work from input to response?",
+    "difficulty": "medium",
+    "category": "query_pipeline",
     "relevant_elements": [
       "rag.query_processor.process_query",
       "rag.query_processor.get_orchestrator",
-      "rag.indexer.orchestrator.CodeGraphIndexer.aquery",
+      "rag.query_processor.validate_query_text",
+      "rag.indexer.orchestrator.CodeGraphIndexer"
+    ]
+  },
+  {
+    "query": "How do I configure vector indexing with Neo4j?",
+    "difficulty": "medium",
+    "category": "vector_config",
+    "relevant_elements": [
+      "rag.schemas.vector_config.VectorIndexConfig",
+      "rag.schemas.vector_config.Neo4jConfig",
+      "rag.schemas.vector_config.get_vector_index_config"
+    ]
+  },
+  {
+    "query": "How are code elements parsed into structured data?",
+    "difficulty": "medium",
+    "category": "parsing_flow",
+    "relevant_elements": [
+      "rag.parser.parser.process_code_element",
+      "rag.parser.parser.create_text_representation",
+      "rag.parser.parser.format_parameters"
+    ]
+  },
+  {
+    "query": "How does AST building work for Python files?",
+    "difficulty": "medium",
+    "category": "ast_building",
+    "relevant_elements": [
+      "rag.ast.ast_builder.build_tree_python_files",
+      "rag.ast.ast_builder.analyze_and_store_python_files",
+      "rag.ast.ast_builder._parse_python_file",
+      "rag.ast.ast_builder.get_parser"
+    ]
+  },
+  {
+    "query": "How are different LLM providers managed and instantiated?",
+    "difficulty": "medium",
+    "category": "llm_providers",
+    "relevant_elements": [
+      "rag.providers.llms.LLMProvider",
+      "rag.providers.llms.get_llm",
+      "rag.providers.llms.get_anthropic_llm",
+      "rag.providers.llms.get_openai_llm"
+    ]
+  },
+  {
+    "query": "How is progress tracked during file processing?",
+    "difficulty": "medium",
+    "category": "progress_tracking",
+    "relevant_elements": [
+      "rag.schemas.progress_tracker.ProgressTracker",
+      "rag.schemas.processed_files_tracker.ProgressState"
+    ]
+  },
+  {
+    "query": "How does the CodeGraphIndexer orchestrate the indexing process?",
+    "difficulty": "medium",
+    "category": "orchestration",
+    "relevant_elements": [
+      "rag.indexer.orchestrator.CodeGraphIndexer",
+      "rag.indexer.orchestrator.BuildResult",
+      "rag.indexer.orchestrator.Mode"
+    ]
+  },
+  {
+    "query": "How are documents converted to LlamaIndex nodes?",
+    "difficulty": "medium",
+    "category": "document_processing",
+    "relevant_elements": [
+      "rag.parser.parser.to_node",
+      "rag.parser.parser.parse_documents_to_nodes",
+      "rag.parser.parser.create_text_representation"
+    ]
+  },
+  {
+    "query": "How are code files loaded and processed into the database?",
+    "difficulty": "medium",
+    "category": "data_ingestion",
+    "relevant_elements": [
+      "rag.ingestion.data_loader.process_code_files",
+      "rag.ingestion.data_loader._process_ast_files",
+      "rag.ingestion.data_loader._build_code_db_graph",
+      "rag.ingestion.data_loader._check_db_populated"
+    ]
+  },
+  {
+    "query": "How does the complete AST processing pipeline work from Python files to stored elements?",
+    "difficulty": "hard",
+    "category": "ast_pipeline",
+    "relevant_elements": [
+      "rag.ast.ast_builder.analyze_and_store_python_files",
+      "rag.ast.ast_builder.build_tree_python_files",
+      "rag.ast.ast_builder._parse_python_file",
+      "rag.ast.ast_builder._process_elements_in_file",
+      "rag.ast.ast_builder._process_single_element",
+      "rag.ast.ast_builder._save_element_to_file",
+      "rag.ast.builders.TreeSitterParser"
+    ]
+  },
+  {
+    "query": "What is the complete flow from code files to searchable vector index?",
+    "difficulty": "hard",
+    "category": "end_to_end_indexing",
+    "relevant_elements": [
+      "rag.indexer.orchestrator.CodeGraphIndexer",
+      "rag.ingestion.data_loader.process_code_files",
+      "rag.ingestion.data_loader._build_code_db_graph",
+      "rag.ingestion.embedding_loader.populate_embeddings",
+      "rag.indexer.vector_indexer.create_vector_index_from_existing_nodes",
+      "rag.indexer.vector_indexer.graph_configure_settings",
+      "rag.db.graph_db.GraphDBManager"
+    ]
+  },
+  {
+    "query": "How does query execution work from API endpoint to LLM response?",
+    "difficulty": "hard",
+    "category": "query_execution_flow",
+    "relevant_elements": [
+      "rag.query_processor.process_query",
+      "rag.query_processor.validate_query_text",
+      "rag.query_processor.get_orchestrator",
+      "rag.query_processor.initialize_query_engine",
+      "rag.indexer.orchestrator.CodeGraphIndexer",
       "rag.engine.engine.make_query_engine"
     ]
   },
   {
-    "query": "How are embeddings generated and stored in Neo4j?",
-    "difficulty": "medium",
-    "category": "embeddings_pipeline",
-    "relevant_files": [
-      "rag/ingestion/embedding_loader.py",
-      "rag/providers/embeddings.py",
-      "rag/db/graph_db.py"
-    ],
+    "query": "How are embeddings generated, stored, and indexed in Neo4j?",
+    "difficulty": "hard",
+    "category": "embedding_pipeline",
     "relevant_elements": [
       "rag.ingestion.embedding_loader.populate_embeddings",
       "rag.providers.embeddings.get_embeddings",
-      "rag.db.graph_db.GraphDBManager.upsert_embeddings"
+      "rag.providers.embeddings._make_openai",
+      "rag.db.graph_db.GraphDBManager",
+      "rag.indexer.vector_indexer.create_vector_index_from_existing_nodes"
     ]
   },
   {
-    "query": "How does the incremental refresh detect changed files?",
-    "difficulty": "medium",
-    "category": "incremental_update",
-    "relevant_files": [
-      "rag/indexer/orchestrator.py"
-    ],
-    "relevant_elements": [
-      "rag.indexer.orchestrator.CodeGraphIndexer.refresh",
-      "rag.indexer.orchestrator.CodeGraphIndexer._diff",
-      "rag.indexer.orchestrator.CodeGraphIndexer._snapshot_files",
-      "rag.indexer.orchestrator.CodeGraphIndexer._sha256"
-    ]
-  },
-  {
-    "query": "How is retry logic implemented for API calls?",
-    "difficulty": "medium",
-    "category": "resilience",
-    "relevant_files": [
-      "rag/schemas/code_element.py"
-    ],
-    "relevant_elements": [
-      "rag.schemas.code_element.CodeElement._with_retries",
-      "rag.schemas.code_element.CodeElement.generate_explanation"
-    ]
-  },
-  {
-    "query": "How does concurrent AST processing work?",
-    "difficulty": "medium",
-    "category": "concurrency",
-    "relevant_files": [
-      "rag/ast/ast_builder.py"
-    ],
-    "relevant_elements": [
-      "rag.ast.ast_builder.build_tree_python_files",
-      "rag.ast.ast_builder._process_elements_in_file",
-      "rag.ast.ast_builder._process_single_element",
-      "rag.ast.ast_builder._generate_explanation_with_rate_limit"
-    ]
-  },
-  {
-    "query": "How are Python AST files parsed and processed?",
-    "difficulty": "medium",
-    "category": "parsing_pipeline",
-    "relevant_files": [
-      "rag/ast/ast_builder.py",
-      "rag/ast/builders.py",
-      "rag/parser/parser.py"
-    ],
-    "relevant_elements": [
-      "rag.ast.ast_builder.analyze_and_store_python_files",
-      "rag.ast.ast_builder.build_tree_python_files",
-      "rag.ast.builders.ASTParser",
-      "rag.parser.parser.parse_documents_to_nodes"
-    ]
-  },
-  {
-    "query": "How does the vector index get created from Neo4j nodes?",
-    "difficulty": "medium",
-    "category": "vector_indexing",
-    "relevant_files": [
-      "rag/indexer/vector_indexer.py",
-      "rag/db/graph_db.py"
-    ],
-    "relevant_elements": [
-      "rag.indexer.vector_indexer.create_vector_index_from_existing_nodes",
-      "rag.indexer.vector_indexer.graph_configure_settings",
-      "rag.db.graph_db.GraphDBManager.get_all_nodes"
-    ]
-  },
-  {
-    "query": "How are function parameters formatted for display?",
-    "difficulty": "medium",
-    "category": "formatting",
-    "relevant_files": [
-      "rag/parser/parser.py"
-    ],
-    "relevant_elements": [
-      "ag.parser.parser.format_parameters"
-    ]
-  },
-  {
-    "query": "What happens when a query is submitted to the FastAPI endpoint?",
-    "difficulty": "medium",
-    "category": "request_flow",
-    "relevant_files": [
-      "server.py",
-      "rag/query_processor.py"
-    ],
-    "relevant_elements": [
-      "server.query_endpoint",
-      "rag.query_processor.process_query",
-      "rag.query_processor.validate_query_text"
-    ]
-  },
-  {
-    "query": "How does the complete indexing pipeline work from code files to searchable index?",
-    "difficulty": "hard",
-    "category": "end_to_end_pipeline",
-    "relevant_files": [
-      "rag/indexer/orchestrator.py",
-      "rag/ingestion/data_loader.py",
-      "rag/ingestion/embedding_loader.py",
-      "rag/indexer/vector_indexer.py",
-      "rag/db/graph_db.py"
-    ],
-    "relevant_elements": [
-      "rag.indexer.orchestrator.CodeGraphIndexer.build",
-      "rag.ingestion.data_loader.process_code_files",
-      "rag.ingestion.data_loader._build_code_db_graph",
-      "rag.ingestion.embedding_loader.populate_embeddings",
-      "rag.indexer.vector_indexer.create_vector_index_from_existing_nodes",
-      "rag.db.graph_db.GraphDBManager.upsert_node",
-      "rag.db.graph_db.GraphDBManager.upsert_relationship"
-    ]
-  },
-  {
-    "query": "How are code dependencies tracked and stored in the graph database?",
-    "difficulty": "hard",
-    "category": "graph_relationships",
-    "relevant_files": [
-      "rag/ast/builders.py",
-      "rag/ingestion/data_loader.py",
-      "rag/db/graph_db.py",
-      "rag/parser/parser.py"
-    ],
-    "relevant_elements": [
-      "rag.ast.builders.ASTParser._extract_dependencies",
-      "rag.ast.builders.TreeSitterParser._extract_imports",
-      "rag.ingestion.data_loader._build_code_db_graph",
-      "rag.db.graph_db.GraphDBManager.upsert_relationship",
-      "rag.parser.parser.process_code_element"
-    ]
-  },
-  {
-    "query": "How does the system handle both cold start and incremental updates?",
-    "difficulty": "hard",
-    "category": "lifecycle_management",
-    "relevant_files": [
-      "rag/indexer/orchestrator.py",
-      "rag/ingestion/data_loader.py",
-      "rag/db/graph_db.py"
-    ],
-    "relevant_elements": [
-      "rag.indexer.orchestrator.CodeGraphIndexer.build",
-      "rag.indexer.orchestrator.CodeGraphIndexer.refresh",
-      "rag.indexer.orchestrator.CodeGraphIndexer._diff",
-      "rag.ingestion.data_loader.process_code_files",
-      "rag.ingestion.data_loader._check_db_populated",
-      "rag.db.graph_db.GraphDBManager.clear_database"
-    ]
-  },
-  {
-    "query": "What is the complete flow for generating AI explanations for code elements?",
-    "difficulty": "hard",
-    "category": "ai_explanation_pipeline",
-    "relevant_files": [
-      "rag/schemas/code_element.py",
-      "rag/prompts/factory.py",
-      "rag/providers/llms.py",
-      "rag/ast/ast_builder.py"
-    ],
-    "relevant_elements": [
-      "rag.schemas.code_element.CodeElement.generate_explanation",
-      "rag.schemas.code_element.CodeElement._with_retries",
-      "rag.prompts.factory.PromptFactory.render",
-      "rag.prompts.factory.PromptFactory.get_instance",
-      "rag.providers.llms.get_llm",
-      "rag.ast.ast_builder._generate_explanation_with_rate_limit"
-    ]
-  },
-  {
-    "query": "How does the query engine combine vector retrieval with graph traversal?",
-    "difficulty": "hard",
-    "category": "hybrid_retrieval",
-    "relevant_files": [
-      "rag/engine/engine.py",
-      "rag/indexer/vector_indexer.py",
-      "rag/indexer/orchestrator.py"
-    ],
-    "relevant_elements": [
-      "rag.engine.engine.make_query_engine",
-      "rag.indexer.vector_indexer.create_vector_index_from_existing_nodes",
-      "rag.indexer.orchestrator.CodeGraphIndexer.aquery",
-      "rag.indexer.orchestrator.CodeGraphIndexer.build"
-    ]
-  },
-  {
-    "query": "How are AST files processed, stored, and tracked for incremental updates?",
-    "difficulty": "hard",
-    "category": "file_processing_lifecycle",
-    "relevant_files": [
-      "rag/ast/ast_builder.py",
-      "rag/schemas/processed_files_tracker.py",
-      "rag/ingestion/data_loader.py"
-    ],
-    "relevant_elements": [
-      "rag.ast.ast_builder.analyze_and_store_python_files",
-      "rag.ast.ast_builder.build_tree_python_files",
-      "rag.ast.ast_builder._process_single_element",
-      "rag.schemas.processed_files_tracker.ProgressState",
-      "rag.schemas.processed_files_tracker.ProgressState.add_element",
-      "rag.ingestion.data_loader._process_ast_files"
-    ]
-  },
-  {
-    "query": "How does error handling and recovery work throughout the RAG pipeline?",
-    "difficulty": "hard",
-    "category": "error_handling_system",
-    "relevant_files": [
-      "rag/exceptions/__init__.py",
-      "rag/query_processor.py",
-      "rag/schemas/code_element.py",
-      "rag/ast/ast_builder.py",
-      "server.py"
-    ],
-    "relevant_elements": [
-      "rag.exceptions.QueryProcessingError",
-      "rag.exceptions.AppError",
-      "rag.query_processor.process_query",
-      "rag.schemas.code_element.CodeElement._with_retries",
-      "rag.ast.ast_builder._process_single_element",
-      "server.query_endpoint"
-    ]
-  },
-  {
-    "query": "How are database schemas created and maintained across different versions?",
+    "query": "How is the graph database schema created and managed?",
     "difficulty": "hard",
     "category": "schema_management",
-    "relevant_files": [
-      "rag/db/graph_db.py",
-      "rag/ingestion/data_loader.py",
-      "rag/schemas/vector_config.py"
-    ],
     "relevant_elements": [
-      "rag.db.graph_db.GraphDBManager.create_schema",
-      "rag.db.graph_db.GraphDBManager.create_vector_index",
+      "rag.db.graph_db.GraphDBManager",
       "rag.ingestion.data_loader._create_schema",
-      "rag.schemas.vector_config.VectorIndexConfig"
+      "rag.schemas.vector_config.VectorIndexConfig",
+      "rag.schemas.vector_config.Neo4jConfig"
     ]
   },
   {
-    "query": "What is the complete initialization sequence when the RAG system starts?",
+    "query": "How does retry logic and rate limiting work for API calls?",
     "difficulty": "hard",
-    "category": "system_initialization",
-    "relevant_files": [
-      "rag/query_processor.py",
-      "rag/indexer/orchestrator.py",
-      "rag/indexer/vector_indexer.py",
-      "rag/db/graph_db.py"
-    ],
+    "category": "resilience",
     "relevant_elements": [
-      "rag.query_processor.initialize_query_engine",
-      "rag.query_processor.get_orchestrator",
-      "rag.indexer.orchestrator.CodeGraphIndexer.build",
+      "rag.schemas.code_element.CodeElement",
+      "rag.schemas.rate_limiter.RateLimit",
+      "rag.ast.ast_builder._generate_explanation_with_rate_limit"
+    ]
+  },
+  {
+    "query": "What is the complete code element lifecycle from parsing to embedding?",
+    "difficulty": "hard",
+    "category": "element_lifecycle",
+    "relevant_elements": [
+      "rag.ast.builders.TreeSitterParser",
+      "rag.schemas.code_element.CodeElement",
+      "rag.parser.parser.process_code_element",
+      "rag.parser.parser.to_node",
+      "rag.ingestion.data_loader._build_code_db_graph",
+      "rag.ingestion.embedding_loader.populate_embeddings"
+    ]
+  },
+  {
+    "query": "How is configuration managed across LLMs, embeddings, and vector stores?",
+    "difficulty": "hard",
+    "category": "configuration_system",
+    "relevant_elements": [
+      "rag.schemas.vector_config.VectorIndexConfig",
+      "rag.schemas.vector_config.Neo4jConfig",
       "rag.indexer.vector_indexer.graph_configure_settings",
-      "rag.db.graph_db.GraphDBManager.__init__"
+      "rag.providers.llms.get_llm",
+      "rag.providers.embeddings.get_embeddings"
     ]
   },
   {
-    "query": "How does the system handle concurrent API requests with rate limiting?",
+    "query": "How does error handling work throughout the RAG pipeline?",
     "difficulty": "hard",
-    "category": "concurrency_control",
-    "relevant_files": [
-      "rag/ast/ast_builder.py",
-      "rag/schemas/code_element.py",
-      "rag/query_processor.py"
-    ],
+    "category": "error_handling_system",
     "relevant_elements": [
-      "rag.ast.ast_builder.build_tree_python_files",
-      "rag.ast.ast_builder._generate_explanation_with_rate_limit",
-      "rag.ast.ast_builder._process_elements_in_file",
-      "rag.schemas.code_element.CodeElement._with_retries",
-      "rag.query_processor.get_orchestrator"
+      "rag.exceptions.__init__.AppError",
+      "rag.exceptions.__init__.QueryProcessingError",
+      "rag.query_processor.process_query",
+      "rag.schemas.code_element.CodeElement",
+      "rag.ast.ast_builder._process_single_element"
+    ]
+  },
+  {
+    "query": "How do the provider registry and factory patterns work for embeddings and LLMs?",
+    "difficulty": "hard",
+    "category": "provider_patterns",
+    "relevant_elements": [
+      "rag.providers.embeddings.register_embedding",
+      "rag.providers.embeddings.get_embeddings",
+      "rag.providers.embeddings.EmbeddingProvider",
+      "rag.providers.llms.get_llm",
+      "rag.providers.llms.LLMProvider"
     ]
   }
 ]

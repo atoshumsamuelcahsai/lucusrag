@@ -122,8 +122,12 @@ class TestProcessASTFiles:
         self, mock_process, tmp_path, sample_ast_data
     ):
         """Test processing directory with valid JSON files."""
-        # Create test JSON file
-        json_file = tmp_path / "test.json"
+        # Create results_* subdirectory (required by _process_ast_files)
+        results_dir = tmp_path / "results_test"
+        results_dir.mkdir()
+
+        # Create test JSON file in results_* directory
+        json_file = results_dir / "test.json"
         json_file.write_text(json.dumps(sample_ast_data))
 
         # Mock process_code_element to return a Document
@@ -141,7 +145,11 @@ class TestProcessASTFiles:
     @patch("rag.ingestion.data_loader.process_code_element")
     def test_process_ast_files_multiple_files(self, mock_process, tmp_path):
         """Test processing multiple JSON files."""
-        # Create multiple JSON files
+        # Create results_* subdirectory (required by _process_ast_files)
+        results_dir = tmp_path / "results_test"
+        results_dir.mkdir()
+
+        # Create multiple JSON files in results_* directory
         for i in range(3):
             data = {
                 "type": "function",
@@ -150,7 +158,7 @@ class TestProcessASTFiles:
                 "code": f"def function_{i}(): pass",
                 "file_path": f"/test/file_{i}.py",
             }
-            json_file = tmp_path / f"test_{i}.json"
+            json_file = results_dir / f"test_{i}.json"
             json_file.write_text(json.dumps(data))
 
         mock_process.return_value = Document(text="test", metadata={})
@@ -164,8 +172,12 @@ class TestProcessASTFiles:
     @patch("rag.ingestion.data_loader.process_code_element")
     def test_process_ast_files_with_invalid_json(self, mock_process, tmp_path):
         """Test processing directory with invalid JSON (should skip and continue)."""
+        # Create results_* subdirectory (required by _process_ast_files)
+        results_dir = tmp_path / "results_test"
+        results_dir.mkdir()
+
         # Create invalid JSON file
-        bad_file = tmp_path / "bad.json"
+        bad_file = results_dir / "bad.json"
         bad_file.write_text("{ invalid json }")
 
         # Create valid JSON file
@@ -176,7 +188,7 @@ class TestProcessASTFiles:
             "code": "def good_function(): pass",
             "file_path": "/test/good.py",
         }
-        good_file = tmp_path / "good.json"
+        good_file = results_dir / "good.json"
         good_file.write_text(json.dumps(good_data))
 
         mock_process.return_value = Document(text="test", metadata={})
@@ -191,6 +203,10 @@ class TestProcessASTFiles:
     @patch("rag.ingestion.data_loader.process_code_element")
     def test_process_ast_files_sets_defaults(self, mock_process, tmp_path):
         """Test that missing optional fields get default values."""
+        # Create results_* subdirectory (required by _process_ast_files)
+        results_dir = tmp_path / "results_test"
+        results_dir.mkdir()
+
         # Create JSON with minimal fields
         minimal_data = {
             "type": "function",
@@ -198,7 +214,7 @@ class TestProcessASTFiles:
             "docstring": "Minimal",
             "code": "def minimal_function(): pass",
         }
-        json_file = tmp_path / "minimal.json"
+        json_file = results_dir / "minimal.json"
         json_file.write_text(json.dumps(minimal_data))
 
         mock_process.return_value = Document(text="test", metadata={})
@@ -397,7 +413,8 @@ class TestProcessCodeFiles:
 
         result = process_code_files(str(tmp_path))
 
-        assert result == 1  # Returns count of documents
+        assert len(result) == 1  # Returns list of documents
+        assert result[0] == mock_doc
         mock_check_db.assert_called_once()
         mock_build_graph.assert_called_once()
         # Check that populate_embeddings was called with correct arguments
@@ -450,7 +467,8 @@ class TestProcessCodeFiles:
 
         result = process_code_files(str(tmp_path))
 
-        assert result == 1  # Returns count of documents
+        assert len(result) == 1  # Returns list of documents
+        assert result[0] == mock_doc
         mock_check_db.assert_called_once()
         mock_build_graph.assert_not_called()  # Should not build graph
         mock_populate_embeddings.assert_not_called()  # Should not populate embeddings
@@ -476,7 +494,8 @@ class TestProcessCodeFiles:
             str(tmp_path), db_manager=mock_db_manager, vector_config=vector_config
         )
 
-        assert result == 1  # Returns count of documents
+        assert len(result) == 1  # Returns list of documents
+        assert result[0] == mock_doc
         mock_db_manager.close.assert_called_once()
 
     @patch("rag.ingestion.data_loader._check_db_populated")
@@ -526,7 +545,7 @@ class TestProcessCodeFiles:
 
         result = process_code_files(str(tmp_path))
 
-        assert result == 0  # Returns count of documents (empty)
+        assert result == []  # Returns empty list of documents
         mock_db_manager.close.assert_called_once()
 
 
@@ -558,15 +577,19 @@ class TestProcessCodeFilesIntegration:
         mock_process_element.return_value = Document(text="test", metadata={})
         mock_populate_embeddings.return_value = 1
 
-        # Create test JSON file
-        json_file = tmp_path / "test.json"
+        # Create results_* subdirectory (required by _process_ast_files)
+        results_dir = tmp_path / "results_test"
+        results_dir.mkdir()
+
+        # Create test JSON file in results_* directory
+        json_file = results_dir / "test.json"
         json_file.write_text(json.dumps(sample_ast_data))
 
         # Execute
         result = process_code_files(str(tmp_path))
 
         # Verify
-        assert result == 1  # Returns count of documents
+        assert len(result) == 1  # Returns list of documents
         mock_db_manager.create_schema.assert_called_once()
         mock_db_manager.create_node.assert_called_once()
         mock_db_manager.create_relationships.assert_called_once()

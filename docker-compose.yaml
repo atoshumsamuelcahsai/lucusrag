@@ -8,6 +8,8 @@ services:
     container_name: lucusrag-app
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - NEO4J_URL=bolt://neo4j:7687
       - NEO4J_USER=neo4j
@@ -16,7 +18,7 @@ services:
       - VOYAGE_API_KEY=${VOYAGE_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
-      - ./examples/ast_cache:/app/examples/ast_cache
+      - ./ast_cache:/app/ast_cache
       - ./data:/app/data
       - ./rag:/app/rag  # Mount for development
     depends_on:

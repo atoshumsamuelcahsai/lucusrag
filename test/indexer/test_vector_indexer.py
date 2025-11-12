@@ -4,8 +4,9 @@ Tests for the vector_indexer module.
 
 import pytest
 import asyncio
-from unittest.mock import Mock, patch
-from llama_index.core import Settings
+from unittest.mock import Mock, patch, MagicMock
+from llama_index.core import Settings, Document
+from llama_index.core.schema import TextNode
 from rag.indexer.vector_indexer import (
     graph_configure_settings,
     create_vector_index_from_existing_nodes,
@@ -106,6 +107,11 @@ class TestCreateVectorIndexFromExistingNodes:
 
     def test_create_vector_index_loads_config_from_env(self):
         """Test that config is loaded from env if not provided."""
+        # Create mock documents
+        mock_docs = [Document(text="test document", metadata={"name": "test"})]
+        # Create proper TextNode objects
+        mock_nodes = [TextNode(text="test node", id_="test-id-1")]
+
         with patch(
             "rag.indexer.vector_indexer._graph_configure_settings_blocking"
         ), patch(
@@ -116,7 +122,11 @@ class TestCreateVectorIndexFromExistingNodes:
             "rag.indexer.vector_indexer.Neo4jGraphStore"
         ), patch(
             "rag.indexer.vector_indexer.VectorStoreIndex.from_vector_store"
-        ) as mock_index:
+        ) as mock_index, patch(
+            "rag.indexer.vector_indexer.parse_documents_to_nodes"
+        ) as mock_parse, patch(
+            "rag.indexer.vector_indexer.logger"
+        ):
 
             mock_config = Mock()
             mock_config.neo4j_url = "bolt://localhost:7687"
@@ -129,15 +139,26 @@ class TestCreateVectorIndexFromExistingNodes:
             mock_config.vector_property = "embedding"
 
             mock_from_env.return_value = mock_config
-            mock_index.return_value = Mock()
+            mock_index_instance = Mock()
+            # Make docstore.docs return a dict-like object with len
+            mock_docstore = MagicMock()
+            mock_docstore.docs = {"test-id-1": mock_nodes[0]}
+            mock_index_instance.docstore = mock_docstore
+            mock_index.return_value = mock_index_instance
+            mock_parse.return_value = mock_nodes
 
-            create_vector_index_from_existing_nodes(vector_config=None)
+            create_vector_index_from_existing_nodes(vector_config=None, docs=mock_docs)
 
             # Should call from_env when config is None
             mock_from_env.assert_called_once()
 
     def test_create_vector_index_creates_stores(self):
         """Test that vector and graph stores are created correctly."""
+        # Create mock documents
+        mock_docs = [Document(text="test document", metadata={"name": "test"})]
+        # Create proper TextNode objects
+        mock_nodes = [TextNode(text="test node", id_="test-id-1")]
+
         config = VectorIndexConfig(
             name="test_index",
             dimension=1536,
@@ -155,11 +176,25 @@ class TestCreateVectorIndexFromExistingNodes:
             "rag.indexer.vector_indexer.Neo4jGraphStore"
         ) as mock_graph, patch(
             "rag.indexer.vector_indexer.VectorStoreIndex.from_vector_store"
-        ) as mock_index:
+        ) as mock_index, patch(
+            "rag.indexer.vector_indexer.parse_documents_to_nodes"
+        ) as mock_parse, patch(
+            "rag.indexer.vector_indexer.SimpleDocumentStore"
+        ) as mock_docstore, patch(
+            "rag.indexer.vector_indexer.logger"
+        ):
 
-            mock_index.return_value = Mock()
+            mock_index_instance = Mock()
+            # Make docstore.docs return a dict-like object with len
+            mock_docstore_attr = MagicMock()
+            mock_docstore_attr.docs = {"test-id-1": mock_nodes[0]}
+            mock_index_instance.docstore = mock_docstore_attr
+            mock_index.return_value = mock_index_instance
+            mock_parse.return_value = mock_nodes
+            mock_docstore_instance = Mock()
+            mock_docstore.return_value = mock_docstore_instance
 
-            create_vector_index_from_existing_nodes(config)
+            create_vector_index_from_existing_nodes(config, docs=mock_docs)
 
             # Verify Neo4jVectorStore was created with correct params
             mock_vector.assert_called_once()
@@ -178,11 +213,18 @@ class TestCreateVectorIndexFromExistingNodes:
             assert "CALLS" in graph_kwargs["edge_labels"]
             assert "DEPENDS_ON" in graph_kwargs["edge_labels"]
 
-            # Verify VectorStoreIndex.from_vector_store was called
+            # Verify VectorStoreIndex.from_vector_store was called with vector_store only
             mock_index.assert_called_once()
             index_call_args = mock_index.call_args.kwargs
             assert "vector_store" in index_call_args
-            assert "graph_store" in index_call_args
+            assert index_call_args.get("show_progress") is False
+
+            # Verify docstore was created and nodes were added
+            mock_docstore.assert_called_once()
+            mock_docstore_instance.add_documents.assert_called_once()
+
+            # Verify parse_documents_to_nodes was called
+            mock_parse.assert_called_once_with(mock_docs)
 
 
 class TestBlockingConfigureSettings:

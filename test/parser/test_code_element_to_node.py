@@ -4,9 +4,10 @@ from rag.parser.parser import to_node
 
 
 class FakeTextNode:
-    def __init__(self, text, metadata=None):
+    def __init__(self, text, metadata=None, id_=None):
         self.text = text
         self.metadata = metadata or {}
+        self.id_ = id_
 
 
 class FakeDocument:
