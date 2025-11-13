@@ -4,12 +4,12 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import Optional
 from pathlib import Path
-import logging
 
 from rag.query_processor import process_query
+from rag.logging_config import get_logger
 
-# Set up logging
-logger = logging.getLogger(__name__)
+# Set up logging (get_logger ensures configuration)
+logger = get_logger(__name__)
 
 app = FastAPI()
 

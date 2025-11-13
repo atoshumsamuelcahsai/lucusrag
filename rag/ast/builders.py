@@ -1,14 +1,14 @@
 from __future__ import annotations
 import ast
 import typing as t
-import logging
 
 from rag.schemas.code_element import CodeElement
+from rag.logging_config import get_logger
 
 from tree_sitter import Language, Parser, Node
 import tree_sitter_python as tspython
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @t.runtime_checkable

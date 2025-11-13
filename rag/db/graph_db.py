@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import random
 import typing as t
 
@@ -10,12 +9,14 @@ from neo4j import AsyncDriver, AsyncGraphDatabase, AsyncManagedTransaction, Asyn
 
 from rag.schemas import CodeElement
 from rag.schemas.vector_config import Neo4jConfig, VectorIndexConfig
+from rag.logging_config import get_logger
 import json
 
 # Load environment variables
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+
+logger = get_logger(__name__)
 
 
 class GraphDBManager:

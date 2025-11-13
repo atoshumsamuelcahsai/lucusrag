@@ -18,12 +18,11 @@ from rag.indexer.vector_indexer import (
 )
 from rag.engine.engine import make_query_engine, retrieve_documents_from_engine
 from rag.schemas.vector_config import VectorIndexConfig
-
-import logging
+from rag.logging_config import get_logger
 import aiofiles  # type: ignore
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class Mode(Enum):

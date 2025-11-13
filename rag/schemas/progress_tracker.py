@@ -1,8 +1,9 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-import logging
 
-logger = logging.getLogger(__name__)
+from rag.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass

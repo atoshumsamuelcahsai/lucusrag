@@ -7,7 +7,6 @@ This module handles Phase 3 of the pipeline:
 - Does NOT modify graph data (read-only for indexing)
 """
 
-import logging
 import asyncio
 import os
 import typing as t
@@ -22,11 +21,12 @@ from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.graph_stores.neo4j import Neo4jGraphStore
 from llama_index.vector_stores.neo4jvector import Neo4jVectorStore
 from llama_index.core.schema import TextNode
+from rag.logging_config import get_logger
 
 # Load environment variables
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 _settings_configured = False

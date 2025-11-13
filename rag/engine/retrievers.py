@@ -6,7 +6,6 @@ from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.core.retrievers import BaseRetriever, VectorIndexRetriever
 import asyncio
 import os
-import logging
 
 from llama_index.core.postprocessor import (
     SimilarityPostprocessor,
@@ -15,9 +14,10 @@ from llama_index.core.postprocessor import (
 from llama_index.core.postprocessor.types import BaseNodePostprocessor
 from rag.schemas.vector_config import VectorIndexConfig
 from dotenv import load_dotenv
+from rag.logging_config import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 load_dotenv(override=True)  # override=True ensures env vars take precedence
 
 

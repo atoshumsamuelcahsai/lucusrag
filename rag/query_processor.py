@@ -4,10 +4,10 @@ import typing as t
 
 from rag.exceptions import QueryProcessingError
 from rag.indexer.orchestrator import CodeGraphIndexer
-import logging
 import asyncio
+from rag.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 _orchestrator: Optional[CodeGraphIndexer] = None

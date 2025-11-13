@@ -1,4 +1,3 @@
-import logging
 import typing as t
 
 from llama_index.core import Document, Settings
@@ -6,8 +5,9 @@ from llama_index.core import Document, Settings
 from rag.db.graph_db import GraphDBManager
 from rag.schemas.vector_config import VectorIndexConfig
 from rag.parser import create_text_representation
+from rag.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def populate_embeddings(

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import typing as t
 from pathlib import Path
 from time import perf_counter
@@ -15,8 +14,9 @@ from rag.parser import process_code_element
 from rag.schemas import CodeElement
 from rag.schemas.vector_config import VectorIndexConfig, get_vector_index_config
 from rag.ingestion.embedding_loader import populate_embeddings
+from rag.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _filter_json_files(json_files: t.List[Path]) -> t.List[Path]:

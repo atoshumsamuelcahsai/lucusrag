@@ -8,8 +8,9 @@ from rag.schemas.processed_files_tracker import ProgressState
 from rag.ast.builders import CodeParser, ASTParser, TreeSitterParser
 import asyncio
 from rag.schemas.code_element import CodeElement
+from rag.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def _save_element_to_file(
@@ -307,12 +308,10 @@ async def analyze_and_store_python_files(
 
 if __name__ == "__main__":
     import argparse
+    from rag.logging_config import configure_logging
 
     # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+    configure_logging(level=logging.INFO)
 
     parser = argparse.ArgumentParser(
         description="Analyze Python codebase and extract code elements",

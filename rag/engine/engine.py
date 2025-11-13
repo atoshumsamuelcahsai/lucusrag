@@ -1,4 +1,3 @@
-import logging
 import typing as t
 from dotenv import load_dotenv
 from llama_index.core.response_synthesizers import (
@@ -8,12 +7,13 @@ from llama_index.core.response_synthesizers import (
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core import VectorStoreIndex
 from rag.engine import retrievers
+from rag.logging_config import get_logger
 
 
 # Load environment variables (search parent directories to find .env in project root)
 load_dotenv(override=True)  # override=True ensures env vars take precedence
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def make_query_engine(

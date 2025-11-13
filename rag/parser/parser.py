@@ -5,9 +5,9 @@ from llama_index.core import Document
 
 from rag.schemas import CodeElement
 import textwrap
-import logging
+from rag.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def format_parameters(params: t.List[dict]) -> t.Optional[str]:
