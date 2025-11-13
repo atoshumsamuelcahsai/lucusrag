@@ -4,7 +4,7 @@ Tests for the vector_indexer module.
 
 import pytest
 import asyncio
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from llama_index.core import Settings, Document
 from llama_index.core.schema import TextNode
 from rag.indexer.vector_indexer import (
@@ -105,7 +105,8 @@ class TestGraphConfigureSettings:
 class TestCreateVectorIndexFromExistingNodes:
     """Test suite for create_vector_index_from_existing_nodes function."""
 
-    def test_create_vector_index_loads_config_from_env(self):
+    @pytest.mark.asyncio
+    async def test_create_vector_index_loads_config_from_env(self):
         """Test that config is loaded from env if not provided."""
         # Create mock documents
         mock_docs = [Document(text="test document", metadata={"name": "test"})]
@@ -129,7 +130,7 @@ class TestCreateVectorIndexFromExistingNodes:
         ) as mock_docstore_class, patch(
             "rag.indexer.vector_indexer.logger"
         ), patch(
-            "neo4j.GraphDatabase"
+            "neo4j.AsyncGraphDatabase"
         ) as mock_graph_db:
 
             mock_config = Mock()
@@ -158,24 +159,32 @@ class TestCreateVectorIndexFromExistingNodes:
             }  # Real dict that supports len()
             mock_docstore_class.return_value = mock_docstore_instance
 
-            # Mock Neo4j driver to avoid actual connection attempts
-            mock_driver = Mock()
-            mock_session = MagicMock()
-            mock_result = Mock()
-            # Make result iterable but empty (no additional nodes from Neo4j)
-            mock_result.__iter__ = Mock(return_value=iter([]))
-            mock_session.run.return_value = mock_result
-            # Make session work as a context manager
-            mock_driver.session.return_value = mock_session
-            mock_driver.close = Mock()
+            # Mock Neo4j async driver to avoid actual connection attempts
+            mock_driver = AsyncMock()
+            mock_session = AsyncMock()
+            mock_result = AsyncMock()
+
+            # Make result async iterable but empty (no additional nodes from Neo4j)
+            async def async_iter():
+                return
+                yield  # Make it an async generator
+
+            mock_result.__aiter__ = AsyncMock(return_value=async_iter())
+            mock_session.run = AsyncMock(return_value=mock_result)
+            # Make session work as an async context manager
+            mock_driver.session = AsyncMock(return_value=mock_session)
+            mock_driver.close = AsyncMock()
             mock_graph_db.driver.return_value = mock_driver
 
-            create_vector_index_from_existing_nodes(vector_config=None, docs=mock_docs)
+            await create_vector_index_from_existing_nodes(
+                vector_config=None, docs=mock_docs
+            )
 
             # Should call from_env when config is None
             mock_from_env.assert_called_once()
 
-    def test_create_vector_index_creates_stores(self):
+    @pytest.mark.asyncio
+    async def test_create_vector_index_creates_stores(self):
         """Test that vector and graph stores are created correctly."""
         # Create mock documents
         mock_docs = [Document(text="test document", metadata={"name": "test"})]
@@ -206,7 +215,7 @@ class TestCreateVectorIndexFromExistingNodes:
         ) as mock_docstore, patch(
             "rag.indexer.vector_indexer.logger"
         ), patch(
-            "neo4j.GraphDatabase"
+            "neo4j.AsyncGraphDatabase"
         ) as mock_graph_db:
 
             mock_index_instance = Mock()
@@ -224,19 +233,24 @@ class TestCreateVectorIndexFromExistingNodes:
             }  # Real dict that supports len()
             mock_docstore.return_value = mock_docstore_instance
 
-            # Mock Neo4j driver to avoid actual connection attempts
-            mock_driver = Mock()
-            mock_session = MagicMock()
-            mock_result = Mock()
-            # Make result iterable but empty (no additional nodes from Neo4j)
-            mock_result.__iter__ = Mock(return_value=iter([]))
-            mock_session.run.return_value = mock_result
-            # Make session work as a context manager
-            mock_driver.session.return_value = mock_session
-            mock_driver.close = Mock()
+            # Mock Neo4j async driver to avoid actual connection attempts
+            mock_driver = AsyncMock()
+            mock_session = AsyncMock()
+            mock_result = AsyncMock()
+
+            # Make result async iterable but empty (no additional nodes from Neo4j)
+            async def async_iter():
+                return
+                yield  # Make it an async generator
+
+            mock_result.__aiter__ = AsyncMock(return_value=async_iter())
+            mock_session.run = AsyncMock(return_value=mock_result)
+            # Make session work as an async context manager
+            mock_driver.session = AsyncMock(return_value=mock_session)
+            mock_driver.close = AsyncMock()
             mock_graph_db.driver.return_value = mock_driver
 
-            create_vector_index_from_existing_nodes(config, docs=mock_docs)
+            await create_vector_index_from_existing_nodes(config, docs=mock_docs)
 
             # Verify Neo4jVectorStore was created with correct params
             mock_vector.assert_called_once()
@@ -311,7 +325,8 @@ class TestBlockingConfigureSettings:
 
 # Integration test placeholder
 @pytest.mark.skip(reason="Requires Neo4j, API keys - run manually for E2E testing")
-def test_full_vector_index_creation():
+@pytest.mark.asyncio
+async def test_full_vector_index_creation():
     """
     Full integration test for vector index creation.
 
@@ -324,7 +339,7 @@ def test_full_vector_index_creation():
     """
     from rag.indexer.vector_indexer import create_vector_index_from_existing_nodes
 
-    index = create_vector_index_from_existing_nodes()
+    index = await create_vector_index_from_existing_nodes()
 
     assert index is not None
     assert hasattr(index, "as_retriever")

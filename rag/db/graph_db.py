@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
-import time
 import typing as t
 
 from dotenv import load_dotenv
-from neo4j import Driver, GraphDatabase, ManagedTransaction, Session
+from neo4j import AsyncDriver, AsyncGraphDatabase, AsyncManagedTransaction, AsyncSession
 
 from rag.schemas import CodeElement
 from rag.schemas.vector_config import Neo4jConfig, VectorIndexConfig
+import json
 
 # Load environment variables
 load_dotenv()
@@ -28,49 +29,49 @@ class GraphDBManager:
     ):
         """Initialize with optional config."""
         self.config = config or Neo4jConfig()
-        self._driver: t.Optional[Driver] = None
+        self._driver: t.Optional[AsyncDriver] = None
         self._max_retries = max_retries
         self._delay = delay
 
-    @property
-    def driver(self) -> Driver:
-        """Lazy init Neo4j driver and validate connectivity."""
+    async def driver(self) -> AsyncDriver:
+        """Lazy init Neo4j async driver and validate connectivity."""
         if self._driver is None:
             for attempt in range(self._max_retries):
                 try:
-                    self._driver = GraphDatabase.driver(
+                    self._driver = AsyncGraphDatabase.driver(
                         self.config.url,
                         auth=(self.config.user, self.config.password),
                         max_connection_lifetime=30 * 60,
                     )
-                    self._driver.verify_connectivity()
+                    await self._driver.verify_connectivity()
                     logger.info(f"Connected to Neo4j at {self.config.url}")
                     break
                 except Exception as e:
                     if attempt == self._max_retries - 1:
                         raise ConnectionError(f"Failed to connect: {e}")
                     delay = self._delay * (2 ** (attempt))
-                    time.sleep(delay + random.random())
+                    await asyncio.sleep(delay + random.random())
                     logger.warning(
                         f"Retrying Neo4j connection ({attempt+1}/{self._max_retries})..."
                     )
         assert self._driver is not None, "Driver should be initialized by now"
         return self._driver
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """Close the db connection."""
         if self._driver:
-            self._driver.close()
+            await self._driver.close()
             self._driver = None
 
     # Schema creation
-    def create_schema(self, vector_config: VectorIndexConfig) -> None:
+    async def create_schema(self, vector_config: VectorIndexConfig) -> None:
         """Create or verify Neo4j schema with indexes and constraints."""
         try:
-            with self.driver.session() as session:
+            driver = await self.driver()
+            async with driver.session() as session:
                 # Create base constraints and indexes
-                self._create_data_schema(session, vector_config)
-                self._create_vector_index(session, vector_config, overwrite=True)
+                await self._create_data_schema(session, vector_config)
+                await self._create_vector_index(session, vector_config, overwrite=True)
                 logger.info(
                     f"Neo4j schema ensured for label {vector_config.node_label}"
                 )
@@ -78,8 +79,8 @@ class GraphDBManager:
             logger.exception(f"Failed to create schema: {str(e)}")
             raise
 
-    def _create_data_schema(
-        self, session: Session, vector_config: VectorIndexConfig
+    async def _create_data_schema(
+        self, session: AsyncSession, vector_config: VectorIndexConfig
     ) -> None:
         statements = [
             # Unique ID constraint
@@ -101,16 +102,18 @@ class GraphDBManager:
                     """,
         ]
 
-        def _run_schema(tx: ManagedTransaction) -> None:
+        async def _run_schema(tx: AsyncManagedTransaction) -> None:
             for stmt in statements:
-                tx.run(stmt)
+                await tx.run(stmt)
 
-        session.execute_write(_run_schema)
+        await session.execute_write(_run_schema)
         logger.info(f"Created data schema for label {vector_config.node_label}")
 
-    def _index_exists(self, session: Session, config: VectorIndexConfig) -> bool:
+    async def _index_exists(
+        self, session: AsyncSession, config: VectorIndexConfig
+    ) -> bool:
         # Check if index exists
-        record = session.run(
+        result = await session.run(
             """
                 SHOW INDEXES
                 YIELD name
@@ -118,15 +121,20 @@ class GraphDBManager:
                 RETURN count(*) > 0 as exists
                 """,
             {"index_name": config.name},
-        ).single()
+        )
+        record = await result.single()
         return bool(record and record.get("exists", False))
 
-    def _drop_index(self, session: Session, config: VectorIndexConfig) -> None:
-        session.run(f"DROP INDEX `{config.name}` IF EXISTS")
+    async def _drop_index(
+        self, session: AsyncSession, config: VectorIndexConfig
+    ) -> None:
+        await session.run(f"DROP INDEX `{config.name}` IF EXISTS")
         logger.info(f"Dropped existing vector index {config.name}")
 
-    def _create_index(self, session: Session, config: VectorIndexConfig) -> None:
-        session.run(
+    async def _create_index(
+        self, session: AsyncSession, config: VectorIndexConfig
+    ) -> None:
+        await session.run(
             """
                 CALL db.index.vector.createNodeIndex(
                     $index_name, $node_label, $vector_property, $dimension, $similarity_metric
@@ -144,23 +152,23 @@ class GraphDBManager:
             f"Created vector index {config.name} (dim={config.dimension}, sim={config.similarity_metric})"
         )
 
-    def _create_vector_index(
-        self, session: Session, config: VectorIndexConfig, overwrite: bool = True
+    async def _create_vector_index(
+        self, session: AsyncSession, config: VectorIndexConfig, overwrite: bool = True
     ) -> None:
         """Create or recreate a vector index with given configuration. This could be very expensive"""
-        exists = self._index_exists(session, config)
+        exists = await self._index_exists(session, config)
 
         if exists:
             if overwrite:
-                self._drop_index(session, config)
-                self._create_index(session, config)
+                await self._drop_index(session, config)
+                await self._create_index(session, config)
             else:
                 logger.info("Vector index %s already exists; skipping", config.name)
         else:
-            self._create_index(session, config)
+            await self._create_index(session, config)
 
     # ---------- Domain upserts ----------
-    def create_node(
+    async def create_node(
         self: GraphDBManager,
         code_info: CodeElement,
         vector_config: VectorIndexConfig,
@@ -168,8 +176,8 @@ class GraphDBManager:
         """Create or update a full CodeElement node with all metadata (except relationships)."""
         label = vector_config.node_label
 
-        def _upsert(tx: ManagedTransaction) -> None:
-            tx.run(
+        async def _upsert(tx: AsyncManagedTransaction) -> None:
+            await tx.run(
                 f"""
               MERGE (n:{label} {{ id: $id }})
               SET n.name = $name,
@@ -206,16 +214,17 @@ class GraphDBManager:
             )
 
         try:
-            with self.driver.session() as session:
-                session.execute_write(_upsert)
+            driver = await self.driver()
+            async with driver.session() as session:
+                await session.execute_write(_upsert)
                 logger.info(f"Upserted node for {code_info.name}")
         except Exception:
             logger.exception(f"Failed to create node for {code_info.name}")
             raise
 
-    def _add_inheritance(
+    async def _add_inheritance(
         self,
-        session: Session,
+        session: AsyncSession,
         vector_config: VectorIndexConfig,
         code_info: CodeElement,
     ) -> None:
@@ -224,8 +233,8 @@ class GraphDBManager:
 
         label = vector_config.node_label
 
-        def _link(tx: ManagedTransaction) -> None:
-            tx.run(
+        async def _link(tx: AsyncManagedTransaction) -> None:
+            await tx.run(
                 f"""
                 MATCH (derived:{label} {{ id: $derived_id }})
                 UNWIND $bases AS base_name
@@ -238,17 +247,20 @@ class GraphDBManager:
                 },
             )
 
-        session.execute_write(_link)
+        await session.execute_write(_link)
 
-    def _add_calls(
-        self, session: Session, vector_config: VectorIndexConfig, code_info: CodeElement
+    async def _add_calls(
+        self,
+        session: AsyncSession,
+        vector_config: VectorIndexConfig,
+        code_info: CodeElement,
     ) -> None:
         if not code_info.calls:
             return
         label = vector_config.node_label
 
-        def _link(tx: ManagedTransaction) -> None:
-            tx.run(
+        async def _link(tx: AsyncManagedTransaction) -> None:
+            await tx.run(
                 f"""
                 MATCH (caller:{label} {{ id: $caller_id }})
                 UNWIND $calls AS callee_name          // full FQN, no split
@@ -261,11 +273,11 @@ class GraphDBManager:
                 {"caller_id": code_info.id, "calls": code_info.calls},
             )
 
-        session.execute_write(_link)
+        await session.execute_write(_link)
 
-    def _add_dependencies(
+    async def _add_dependencies(
         self,
-        session: Session,
+        session: AsyncSession,
         vector_config: VectorIndexConfig,
         code_info: CodeElement,
     ) -> None:
@@ -273,8 +285,8 @@ class GraphDBManager:
             return
         label = vector_config.node_label
 
-        def _link(tx: ManagedTransaction) -> None:
-            tx.run(
+        async def _link(tx: AsyncManagedTransaction) -> None:
+            await tx.run(
                 f"""
                 MATCH (source:{label} {{ id: $source_id }})
                 UNWIND $dependencies AS dep_name
@@ -290,25 +302,26 @@ class GraphDBManager:
                 },
             )
 
-        session.execute_write(_link)
+        await session.execute_write(_link)
 
-    def create_relationships(
+    async def create_relationships(
         self, code_info: CodeElement, vector_config: VectorIndexConfig
     ) -> None:
         """Create relationships between nodes."""
         try:
-            with self.driver.session() as session:
+            driver = await self.driver()
+            async with driver.session() as session:
                 # 1. Add inheritance
                 if code_info.base_classes:  # Direct attribute access
-                    self._add_inheritance(session, vector_config, code_info)
+                    await self._add_inheritance(session, vector_config, code_info)
 
                 # 2. Add calls
                 if code_info.calls:  # Direct attribute access
-                    self._add_calls(session, vector_config, code_info)
+                    await self._add_calls(session, vector_config, code_info)
 
                 # 3. Add dependencies
                 if code_info.dependencies:  # Direct attribute access
-                    self._add_dependencies(session, vector_config, code_info)
+                    await self._add_dependencies(session, vector_config, code_info)
 
             logger.info(f"Added relationships for {code_info.name}")
 
@@ -319,7 +332,7 @@ class GraphDBManager:
             raise
 
     # ----------  upsert embeddings ----------
-    def upsert_embeddings(
+    async def upsert_embeddings(
         self,
         rows: list[dict],
         vector_config: VectorIndexConfig,
@@ -333,7 +346,6 @@ class GraphDBManager:
         - text: text content
         - metadata: dict with node metadata (will be stored as _node_content JSON string)
         """
-        import json
 
         label = vector_config.node_label
         prop = vector_config.vector_property
@@ -351,8 +363,8 @@ class GraphDBManager:
             }
             serialized_rows.append(serialized_row)
 
-        def _write(tx: ManagedTransaction, /) -> int:
-            result = tx.run(
+        async def _write(tx: AsyncManagedTransaction, /) -> int:
+            result = await tx.run(
                 f"""
                 UNWIND $rows AS row
                 MATCH (n:{label} {{ id: row.id }})
@@ -364,9 +376,10 @@ class GraphDBManager:
                 """,
                 {"rows": serialized_rows},
             )
-            record = result.single()
+            record = await result.single()
             return record["updated"] if record else 0
 
-        with self.driver.session() as session:
-            updated_count = session.execute_write(_write)
+        driver = await self.driver()
+        async with driver.session() as session:
+            updated_count = await session.execute_write(_write)
         return updated_count

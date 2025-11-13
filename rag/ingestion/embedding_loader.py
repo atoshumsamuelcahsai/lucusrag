@@ -10,7 +10,7 @@ from rag.parser import create_text_representation
 logger = logging.getLogger(__name__)
 
 
-def populate_embeddings(
+async def populate_embeddings(
     db: GraphDBManager,
     documents: t.List[Document],
     vector_config: t.Optional[VectorIndexConfig] = None,
@@ -60,6 +60,6 @@ def populate_embeddings(
         logger.info("Nothing to write (no successful embeddings).")
         return 0
 
-    updated = db.upsert_embeddings(payload, vector_config)
+    updated = await db.upsert_embeddings(payload, vector_config)
     logger.info("Upserted embeddings for %d nodes.", updated)
     return updated

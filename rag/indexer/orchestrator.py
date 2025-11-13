@@ -93,13 +93,13 @@ class CodeGraphIndexer:
         logger.info(
             "Building graph structure (nodes + relationships + populate if empty)..."
         )
-        docs = process_code_files(str(self.ast_dir))
+        docs = await process_code_files(str(self.ast_dir))
         logger.info(f"Graph structure built with {len(docs)} nodes")
 
         logger.info("Getting vector index from existing nodes…")
         # Parse AST docs once and pass them down so vector_indexer can hydrate docstore cleanly
 
-        self._index = create_vector_index_from_existing_nodes(config, docs=docs)
+        self._index = await create_vector_index_from_existing_nodes(config, docs=docs)
         logger.info("Vector index created successfully!!!")
 
         await self._update_manifest(config)
@@ -151,13 +151,13 @@ class CodeGraphIndexer:
 
         # Phase 1: Rebuild graph structure (force rebuild)
         logger.info("Rebuilding graph structure...")
-        docs = process_code_files(str(self.ast_dir), force_rebuild_graph=True)
+        docs = await process_code_files(str(self.ast_dir), force_rebuild_graph=True)
 
         await self._save_manifest(now, embed_sig=self._embed_signature(config))
         logger.info("Manifest files updated successfully!!!")
 
         # Phase 2: Recreate vector index
-        self._index = create_vector_index_from_existing_nodes(config, docs=docs)
+        self._index = await create_vector_index_from_existing_nodes(config, docs=docs)
         self._engine = make_query_engine(self._index, k=self.top_k)
         logger.info("Vector index recreated successfully")
 

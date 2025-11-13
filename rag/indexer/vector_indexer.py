@@ -21,6 +21,7 @@ from llama_index.core import VectorStoreIndex, Document
 from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.graph_stores.neo4j import Neo4jGraphStore
 from llama_index.vector_stores.neo4jvector import Neo4jVectorStore
+from llama_index.core.schema import TextNode
 
 # Load environment variables
 load_dotenv()
@@ -79,7 +80,7 @@ def _graph_configure_settings_blocking() -> None:
         logger.debug("Settings called from running loop; assume configured elsewhere.")
 
 
-def create_vector_index_from_existing_nodes(
+async def create_vector_index_from_existing_nodes(
     vector_config: t.Optional[VectorIndexConfig] = None,
     docs: list[Document] | None = None,
 ) -> VectorStoreIndex:
@@ -159,21 +160,18 @@ def create_vector_index_from_existing_nodes(
     # This ensures graph expansion can find nodes from previous runs
     logger.info("Fetching all nodes from Neo4j to populate docstore...")
     try:
-        from neo4j import GraphDatabase
+        from neo4j import AsyncGraphDatabase
 
-        driver = GraphDatabase.driver(neo4j_url, auth=(neo4j_user, neo4j_password))
-        with driver.session() as session:
-            result = session.run(
+        driver = AsyncGraphDatabase.driver(neo4j_url, auth=(neo4j_user, neo4j_password))
+        async with driver.session() as session:
+            result = await session.run(
                 f"MATCH (n:{vector_config.node_label}) RETURN n.id AS id, n.text AS text, n"
             )
             neo4j_node_count = 0
-            for record in result:
+            async for record in result:
                 node_id = record["id"]
                 # Only add if not already in docstore
                 if node_id not in docstore.docs:
-                    # Create a TextNode from Neo4j data
-                    from llama_index.core.schema import TextNode
-
                     node_data = dict(record["n"])
                     text_node = TextNode(
                         id_=node_id,
@@ -186,7 +184,7 @@ def create_vector_index_from_existing_nodes(
                     )
                     docstore.add_documents([text_node])
                     neo4j_node_count += 1
-        driver.close()
+        await driver.close()
         logger.info(f"Added {neo4j_node_count} additional nodes from Neo4j to docstore")
     except Exception as e:
         logger.warning(f"Could not fetch additional nodes from Neo4j: {e}")

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from neo4j import Driver
+from unittest.mock import Mock, MagicMock, patch, AsyncMock
+from neo4j import AsyncDriver
 
 from rag.db.graph_db import GraphDBManager
 from rag.schemas import CodeElement
@@ -60,20 +60,23 @@ def code_element():
 
 @pytest.fixture
 def mock_driver():
-    """Fixture for mocked Neo4j driver."""
-    driver = MagicMock(spec=Driver)
-    driver.verify_connectivity = Mock()
-    driver.close = Mock()
+    """Fixture for mocked Neo4j async driver."""
+    driver = MagicMock(spec=AsyncDriver)
+    driver.verify_connectivity = AsyncMock()
+    driver.close = AsyncMock()
     return driver
 
 
 @pytest.fixture
 def mock_session():
-    """Fixture for mocked Neo4j session."""
-    session = MagicMock()
-    session.run = Mock(return_value=MagicMock())
-    session.__enter__ = Mock(return_value=session)
-    session.__exit__ = Mock(return_value=False)
+    """Fixture for mocked Neo4j async session."""
+    session = AsyncMock()
+    mock_result = AsyncMock()
+    mock_result.single = AsyncMock(return_value=MagicMock())
+    session.run = AsyncMock(return_value=mock_result)
+    session.execute_write = AsyncMock()
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
     return session
 
 
@@ -104,15 +107,16 @@ class TestGraphDBManagerInit:
 class TestGraphDBManagerDriver:
     """Tests for driver property and connection management."""
 
-    @patch("rag.db.graph_db.GraphDatabase")
-    def test_driver_successful_connection(
+    @pytest.mark.asyncio
+    @patch("rag.db.graph_db.AsyncGraphDatabase")
+    async def test_driver_successful_connection(
         self, mock_graph_db, neo4j_config, mock_driver
     ):
         """Test successful driver connection on first attempt."""
         mock_graph_db.driver.return_value = mock_driver
 
         manager = GraphDBManager(config=neo4j_config)
-        driver = manager.driver
+        driver = await manager.driver()
 
         assert driver == mock_driver
         mock_graph_db.driver.assert_called_once_with(
@@ -122,9 +126,10 @@ class TestGraphDBManagerDriver:
         )
         mock_driver.verify_connectivity.assert_called_once()
 
-    @patch("rag.db.graph_db.GraphDatabase")
-    @patch("rag.db.graph_db.time.sleep")
-    def test_driver_retry_logic(
+    @pytest.mark.asyncio
+    @patch("rag.db.graph_db.AsyncGraphDatabase")
+    @patch("rag.db.graph_db.asyncio.sleep")
+    async def test_driver_retry_logic(
         self, mock_sleep, mock_graph_db, neo4j_config, mock_driver
     ):
         """Test retry logic on connection failure."""
@@ -136,76 +141,85 @@ class TestGraphDBManagerDriver:
         ]
 
         manager = GraphDBManager(config=neo4j_config, max_retries=3, delay=1.0)
-        driver = manager.driver
+        driver = await manager.driver()
 
         assert driver == mock_driver
         assert mock_graph_db.driver.call_count == 3
         assert mock_sleep.call_count == 2
 
-    @patch("rag.db.graph_db.GraphDatabase")
-    def test_driver_max_retries_exceeded(self, mock_graph_db, neo4j_config):
+    @pytest.mark.asyncio
+    @patch("rag.db.graph_db.AsyncGraphDatabase")
+    async def test_driver_max_retries_exceeded(self, mock_graph_db, neo4j_config):
         """Test that ConnectionError is raised after max retries."""
         mock_graph_db.driver.side_effect = Exception("Connection failed")
 
         manager = GraphDBManager(config=neo4j_config, max_retries=2)
 
         with pytest.raises(ConnectionError, match="Failed to connect"):
-            _ = manager.driver
+            _ = await manager.driver()
 
-    @patch("rag.db.graph_db.GraphDatabase")
-    def test_driver_caching(self, mock_graph_db, neo4j_config, mock_driver):
+    @pytest.mark.asyncio
+    @patch("rag.db.graph_db.AsyncGraphDatabase")
+    async def test_driver_caching(self, mock_graph_db, neo4j_config, mock_driver):
         """Test that driver is cached after first initialization."""
         mock_graph_db.driver.return_value = mock_driver
 
         manager = GraphDBManager(config=neo4j_config)
-        driver1 = manager.driver
-        driver2 = manager.driver
+        driver1 = await manager.driver()
+        driver2 = await manager.driver()
 
         assert driver1 == driver2
         mock_graph_db.driver.assert_called_once()
 
-    def test_close_driver(self, neo4j_config):
+    @pytest.mark.asyncio
+    async def test_close_driver(self, neo4j_config):
         """Test closing the driver."""
         manager = GraphDBManager(config=neo4j_config)
-        mock_driver = Mock()
+        mock_driver = AsyncMock()
         manager._driver = mock_driver
 
-        manager.close()
+        await manager.close()
 
         mock_driver.close.assert_called_once()
         assert manager._driver is None
 
-    def test_close_no_driver(self):
+    @pytest.mark.asyncio
+    async def test_close_no_driver(self):
         """Test closing when no driver exists."""
         manager = GraphDBManager()
-        manager.close()  # Should not raise
+        await manager.close()  # Should not raise
 
 
 class TestGraphDBManagerSchema:
     """Tests for schema creation."""
 
-    @patch("rag.db.graph_db.GraphDatabase")
-    def test_create_schema_success(
+    @pytest.mark.asyncio
+    @patch("rag.db.graph_db.AsyncGraphDatabase")
+    async def test_create_schema_success(
         self, mock_graph_db, neo4j_config, vector_config, mock_session, mock_driver
     ):
         """Test successful schema creation."""
-        mock_driver.session.return_value = mock_session
+        # Make session an async context manager
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        # Make driver.session() return the session (as async context manager)
+        mock_driver.session = MagicMock(return_value=mock_session)
         mock_graph_db.driver.return_value = mock_driver
 
         # Intercept execute_write and capture the transaction
-        tx = Mock()
+        tx = AsyncMock()
 
-        def fake_execute_write(fn, *args, **kwargs):
-            return fn(tx)
+        async def fake_execute_write(fn, *args, **kwargs):
+            return await fn(tx)
 
         mock_session.execute_write.side_effect = fake_execute_write
 
         manager = GraphDBManager(config=neo4j_config)
 
         # Mock _create_vector_index
-        manager._create_vector_index = Mock()
+        manager._create_vector_index = AsyncMock()
 
-        manager.create_schema(vector_config)
+        await manager.create_schema(vector_config)
 
         # Verify session was used
         mock_driver.session.assert_called_once()
@@ -217,61 +231,78 @@ class TestGraphDBManagerSchema:
         # Verify vector index creation was called
         manager._create_vector_index.assert_called_once()
 
-    @patch("rag.db.graph_db.GraphDatabase")
-    def test_create_schema_failure(
+    @pytest.mark.asyncio
+    @patch("rag.db.graph_db.AsyncGraphDatabase")
+    async def test_create_schema_failure(
         self, mock_graph_db, neo4j_config, vector_config, mock_session, mock_driver
     ):
         """Test schema creation failure."""
-        mock_driver.session.return_value = mock_session
+        # Make session an async context manager
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        # Make driver.session() return the session (as async context manager)
+        mock_driver.session = MagicMock(return_value=mock_session)
         mock_graph_db.driver.return_value = mock_driver
-        mock_session.run.side_effect = Exception("Schema creation failed")
+
+        async def raise_exception(*args, **kwargs):
+            raise Exception("Schema creation failed")
+
+        mock_session.execute_write.side_effect = raise_exception
 
         manager = GraphDBManager(config=neo4j_config)
 
         with pytest.raises(Exception, match="Schema creation failed"):
-            manager.create_schema(vector_config)
+            await manager.create_schema(vector_config)
 
 
 class TestGraphDBManagerIndexOperations:
     """Tests for index operations."""
 
-    def test_index_exist_true(self, mock_session, vector_config):
+    @pytest.mark.asyncio
+    async def test_index_exist_true(self, mock_session, vector_config):
         """Test checking if index exists (returns True)."""
         mock_record = Mock()
         mock_record.get.return_value = True
-        mock_session.run.return_value.single.return_value = mock_record
+        mock_result = AsyncMock()
+        mock_result.single = AsyncMock(return_value=mock_record)
+        mock_session.run = AsyncMock(return_value=mock_result)
 
         manager = GraphDBManager()
-        exists = manager._index_exists(mock_session, vector_config)
+        exists = await manager._index_exists(mock_session, vector_config)
 
         assert exists is True
         mock_session.run.assert_called_once()
 
-    def test_index_exist_false(self, mock_session, vector_config):
+    @pytest.mark.asyncio
+    async def test_index_exist_false(self, mock_session, vector_config):
         """Test checking if index exists (returns False)."""
         mock_record = Mock()
         mock_record.get.return_value = False
-        mock_session.run.return_value.single.return_value = mock_record
+        mock_result = AsyncMock()
+        mock_result.single = AsyncMock(return_value=mock_record)
+        mock_session.run = AsyncMock(return_value=mock_result)
 
         manager = GraphDBManager()
-        exists = manager._index_exists(mock_session, vector_config)
+        exists = await manager._index_exists(mock_session, vector_config)
 
         assert exists is False
 
-    def test_drop_index(self, mock_session, vector_config):
+    @pytest.mark.asyncio
+    async def test_drop_index(self, mock_session, vector_config):
         """Test dropping an index."""
         manager = GraphDBManager()
-        manager._drop_index(mock_session, vector_config)
+        await manager._drop_index(mock_session, vector_config)
 
         mock_session.run.assert_called_once()
         call_args = mock_session.run.call_args[0][0]
         assert "DROP INDEX" in call_args
         assert vector_config.name in call_args
 
-    def test_create_index(self, mock_session, vector_config):
+    @pytest.mark.asyncio
+    async def test_create_index(self, mock_session, vector_config):
         """Test creating an index."""
         manager = GraphDBManager()
-        manager._create_index(mock_session, vector_config)
+        await manager._create_index(mock_session, vector_config)
 
         mock_session.run.assert_called_once()
         call_args = mock_session.run.call_args
@@ -284,37 +315,44 @@ class TestGraphDBManagerIndexOperations:
         assert params["node_label"] == vector_config.node_label
         assert params["dimension"] == vector_config.dimension
 
-    def test_create_vector_index_new(self, mock_session, vector_config):
+    @pytest.mark.asyncio
+    async def test_create_vector_index_new(self, mock_session, vector_config):
         """Test creating vector index when it doesn't exist."""
         manager = GraphDBManager()
-        manager._index_exists = Mock(return_value=False)
-        manager._create_index = Mock()
+        manager._index_exists = AsyncMock(return_value=False)
+        manager._create_index = AsyncMock()
 
-        manager._create_vector_index(mock_session, vector_config)
+        await manager._create_vector_index(mock_session, vector_config)
 
         manager._index_exists.assert_called_once()
         manager._create_index.assert_called_once()
 
-    def test_create_vector_index_exists_overwrite(self, mock_session, vector_config):
+    @pytest.mark.asyncio
+    async def test_create_vector_index_exists_overwrite(
+        self, mock_session, vector_config
+    ):
         """Test creating vector index when it exists and overwrite=True."""
         manager = GraphDBManager()
-        manager._index_exists = Mock(return_value=True)
-        manager._drop_index = Mock()
-        manager._create_index = Mock()
+        manager._index_exists = AsyncMock(return_value=True)
+        manager._drop_index = AsyncMock()
+        manager._create_index = AsyncMock()
 
-        manager._create_vector_index(mock_session, vector_config, overwrite=True)
+        await manager._create_vector_index(mock_session, vector_config, overwrite=True)
 
         manager._drop_index.assert_called_once()
         manager._create_index.assert_called_once()
 
-    def test_create_vector_index_exists_no_overwrite(self, mock_session, vector_config):
+    @pytest.mark.asyncio
+    async def test_create_vector_index_exists_no_overwrite(
+        self, mock_session, vector_config
+    ):
         """Test creating vector index when it exists and overwrite=False."""
         manager = GraphDBManager()
-        manager._index_exists = Mock(return_value=True)
-        manager._drop_index = Mock()
-        manager._create_index = Mock()
+        manager._index_exists = AsyncMock(return_value=True)
+        manager._drop_index = AsyncMock()
+        manager._create_index = AsyncMock()
 
-        manager._create_vector_index(mock_session, vector_config, overwrite=False)
+        await manager._create_vector_index(mock_session, vector_config, overwrite=False)
 
         manager._drop_index.assert_not_called()
         manager._create_index.assert_not_called()
@@ -323,30 +361,34 @@ class TestGraphDBManagerIndexOperations:
 class TestGraphDBManagerNodeOperations:
     """Tests for node operations."""
 
-    @patch("rag.db.graph_db.GraphDatabase")
-    def test_create_node_success(
+    @pytest.mark.asyncio
+    @patch("rag.db.graph_db.AsyncGraphDatabase")
+    async def test_create_node_success(
         self, mock_graph_db, neo4j_config, vector_config, code_element
     ):
         """Test successful node creation."""
-        mock_driver = Mock()
-        mock_session = Mock()
-        mock_graph_db.driver.return_value = mock_driver
+        mock_driver = AsyncMock()
+        mock_session = AsyncMock()
 
-        # Mock context manager for session
-        mock_driver.session.return_value.__enter__ = Mock(return_value=mock_session)
-        mock_driver.session.return_value.__exit__ = Mock(return_value=False)
+        # Make session an async context manager
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
 
         # Mock transaction for execute_write
-        mock_tx = Mock()
-        mock_session.execute_write.side_effect = lambda fn: fn(mock_tx)
+        mock_tx = AsyncMock()
+
+        async def fake_execute_write(fn, *args, **kwargs):
+            return await fn(mock_tx)
+
+        mock_session.execute_write.side_effect = fake_execute_write
+        # Make driver.session() return the session (as async context manager)
+        mock_driver.session = MagicMock(return_value=mock_session)
+        mock_graph_db.driver.return_value = mock_driver
 
         manager = GraphDBManager(config=neo4j_config)
 
-        # Reset any prior session() calls
-        mock_driver.session.reset_mock()
-
         # Act
-        manager.create_node(code_element, vector_config)
+        await manager.create_node(code_element, vector_config)
 
         # Assert
         mock_driver.session.assert_called_once()
@@ -356,8 +398,9 @@ class TestGraphDBManagerNodeOperations:
         assert "MERGE" in cypher
         assert vector_config.node_label in cypher
 
-    @patch("rag.db.graph_db.GraphDatabase")
-    def test_create_node_failure(
+    @pytest.mark.asyncio
+    @patch("rag.db.graph_db.AsyncGraphDatabase")
+    async def test_create_node_failure(
         self,
         mock_graph_db,
         neo4j_config,
@@ -365,27 +408,34 @@ class TestGraphDBManagerNodeOperations:
         code_element,
     ):
         """Test node creation failure."""
-        mock_driver = Mock()
-        mock_session = Mock()
+        mock_driver = AsyncMock()
+        mock_session = AsyncMock()
+
+        # Make session an async context manager
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        # Make driver.session() return the session (as async context manager)
+        mock_driver.session = MagicMock(return_value=mock_session)
         mock_graph_db.driver.return_value = mock_driver
 
-        # Mock context manager for session
-        mock_driver.session.return_value.__enter__ = Mock(return_value=mock_session)
-        mock_driver.session.return_value.__exit__ = Mock(return_value=False)
-
         # Mock execute_write to raise exception
-        mock_session.execute_write.side_effect = Exception("Node creation failed")
+        async def raise_exception(*args, **kwargs):
+            raise Exception("Node creation failed")
+
+        mock_session.execute_write.side_effect = raise_exception
 
         manager = GraphDBManager(config=neo4j_config)
 
         with pytest.raises(Exception, match="Node creation failed"):
-            manager.create_node(code_element, vector_config)
+            await manager.create_node(code_element, vector_config)
 
 
 class TestGraphDBManagerRelationshipOperations:
     """Tests for relationship operations."""
 
-    def test_add_inheritance(self, mock_session, vector_config):
+    @pytest.mark.asyncio
+    async def test_add_inheritance(self, mock_session, vector_config):
         """Test adding inheritance relationships."""
         code_element = CodeElement(
             type="class",
@@ -397,11 +447,15 @@ class TestGraphDBManagerRelationshipOperations:
         )
 
         # Mock transaction for execute_write
-        mock_tx = Mock()
-        mock_session.execute_write.side_effect = lambda fn: fn(mock_tx)
+        mock_tx = AsyncMock()
+
+        async def fake_execute_write(fn, *args, **kwargs):
+            return await fn(mock_tx)
+
+        mock_session.execute_write.side_effect = fake_execute_write
 
         manager = GraphDBManager()
-        manager._add_inheritance(mock_session, vector_config, code_element)
+        await manager._add_inheritance(mock_session, vector_config, code_element)
 
         # Verify execute_write was called
         mock_session.execute_write.assert_called_once()
@@ -412,7 +466,8 @@ class TestGraphDBManagerRelationshipOperations:
         params = mock_tx.run.call_args[0][1]
         assert params["bases"] == ["BaseClass1", "BaseClass2"]
 
-    def test_add_calls(self, mock_session, vector_config):
+    @pytest.mark.asyncio
+    async def test_add_calls(self, mock_session, vector_config):
         """Test adding function call relationships."""
         code_element = CodeElement(
             type="function",
@@ -424,11 +479,15 @@ class TestGraphDBManagerRelationshipOperations:
         )
 
         # Mock transaction for execute_write
-        mock_tx = Mock()
-        mock_session.execute_write.side_effect = lambda fn: fn(mock_tx)
+        mock_tx = AsyncMock()
+
+        async def fake_execute_write(fn, *args, **kwargs):
+            return await fn(mock_tx)
+
+        mock_session.execute_write.side_effect = fake_execute_write
 
         manager = GraphDBManager()
-        manager._add_calls(mock_session, vector_config, code_element)
+        await manager._add_calls(mock_session, vector_config, code_element)
 
         # Verify execute_write was called
         mock_session.execute_write.assert_called_once()
@@ -440,7 +499,8 @@ class TestGraphDBManagerRelationshipOperations:
         assert params["caller_id"] == code_element.id
         assert params["calls"] == ["module.function1", "function2"]
 
-    def test_add_dependencies(self, mock_session, vector_config):
+    @pytest.mark.asyncio
+    async def test_add_dependencies(self, mock_session, vector_config):
         """Test adding dependency relationships."""
         code_element = CodeElement(
             type="module",
@@ -452,11 +512,15 @@ class TestGraphDBManagerRelationshipOperations:
         )
 
         # Mock transaction for execute_write
-        mock_tx = Mock()
-        mock_session.execute_write.side_effect = lambda fn: fn(mock_tx)
+        mock_tx = AsyncMock()
+
+        async def fake_execute_write(fn, *args, **kwargs):
+            return await fn(mock_tx)
+
+        mock_session.execute_write.side_effect = fake_execute_write
 
         manager = GraphDBManager()
-        manager._add_dependencies(mock_session, vector_config, code_element)
+        await manager._add_dependencies(mock_session, vector_config, code_element)
 
         # Verify execute_write was called
         mock_session.execute_write.assert_called_once()
@@ -468,8 +532,9 @@ class TestGraphDBManagerRelationshipOperations:
         assert params["source_id"] == code_element.id
         assert params["dependencies"] == ["dep1.module", "dep2"]
 
-    @patch("rag.db.graph_db.GraphDatabase")
-    def test_create_relationships_success(
+    @pytest.mark.asyncio
+    @patch("rag.db.graph_db.AsyncGraphDatabase")
+    async def test_create_relationships_success(
         self, mock_graph_db, neo4j_config, vector_config, mock_session, mock_driver
     ):
         """Test successful relationship creation."""
@@ -483,25 +548,32 @@ class TestGraphDBManagerRelationshipOperations:
             calls=["function"],
             dependencies=["module"],
         )
-        # Mock context manager for session
-        mock_driver.session.return_value.__enter__ = Mock(return_value=mock_session)
-        mock_driver.session.return_value.__exit__ = Mock(return_value=False)
+        # Make session an async context manager
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        # Make driver.session() return the session (as async context manager)
+        mock_driver.session = MagicMock(return_value=mock_session)
 
         # Mock transaction for execute_write
-        mock_tx = Mock()
-        mock_session.execute_write.side_effect = lambda fn: fn(mock_tx)
+        mock_tx = AsyncMock()
+
+        async def fake_execute_write(fn, *args, **kwargs):
+            return await fn(mock_tx)
+
+        mock_session.execute_write.side_effect = fake_execute_write
 
         mock_graph_db.driver.return_value = mock_driver
 
         manager = GraphDBManager(config=neo4j_config)
-        manager.create_relationships(code_element, vector_config)
+        await manager.create_relationships(code_element, vector_config)
 
         mock_driver.session.assert_called_once()
         # Should call execute_write for: base_classes, calls, dependencies = 3 times
         assert mock_session.execute_write.call_count == 3
 
-    @patch("rag.db.graph_db.GraphDatabase")
-    def test_create_relationships_failure(
+    @pytest.mark.asyncio
+    @patch("rag.db.graph_db.AsyncGraphDatabase")
+    async def test_create_relationships_failure(
         self,
         mock_graph_db,
         neo4j_config,
@@ -513,21 +585,24 @@ class TestGraphDBManagerRelationshipOperations:
         """Test relationship creation failure."""
         code_element.base_classes = ["BaseClass"]
 
-        # Mock context manager for session
-        mock_driver.session.return_value.__enter__ = Mock(return_value=mock_session)
-        mock_driver.session.return_value.__exit__ = Mock(return_value=False)
+        # Make session an async context manager
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        # Make driver.session() return the session (as async context manager)
+        mock_driver.session = MagicMock(return_value=mock_session)
 
         # Mock execute_write to raise exception
-        mock_session.execute_write.side_effect = Exception(
-            "Relationship creation failed"
-        )
+        async def raise_exception(*args, **kwargs):
+            raise Exception("Relationship creation failed")
+
+        mock_session.execute_write.side_effect = raise_exception
 
         mock_graph_db.driver.return_value = mock_driver
 
         manager = GraphDBManager(config=neo4j_config)
 
         with pytest.raises(Exception, match="Relationship creation failed"):
-            manager.create_relationships(code_element, vector_config)
+            await manager.create_relationships(code_element, vector_config)
 
 
 class TestGetVectorIndexConfig:
@@ -564,8 +639,9 @@ class TestGetVectorIndexConfig:
 class TestGraphDBManagerIntegration:
     """Integration tests for GraphDBManager."""
 
-    @patch("rag.db.graph_db.GraphDatabase")
-    def test_full_workflow(
+    @pytest.mark.asyncio
+    @patch("rag.db.graph_db.AsyncGraphDatabase")
+    async def test_full_workflow(
         self,
         mock_graph_db,
         neo4j_config,
@@ -575,27 +651,39 @@ class TestGraphDBManagerIntegration:
         mock_driver,
     ):
         """Test full workflow: connect, create schema, add nodes, add relationships, close."""
-        mock_driver.session.return_value = mock_session
+        # Make session an async context manager
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        # Make driver.session() return the session (as async context manager)
+        mock_driver.session = MagicMock(return_value=mock_session)
         mock_graph_db.driver.return_value = mock_driver
+
+        # Mock transaction for execute_write
+        mock_tx = AsyncMock()
+
+        async def fake_execute_write(fn, *args, **kwargs):
+            return await fn(mock_tx)
+
+        mock_session.execute_write.side_effect = fake_execute_write
 
         manager = GraphDBManager(config=neo4j_config)
 
         # Create schema
-        manager._create_vector_index = Mock()
-        manager.create_schema(vector_config)
+        manager._create_vector_index = AsyncMock()
+        await manager.create_schema(vector_config)
 
         # Create node
-        manager.create_node(code_element, vector_config)
+        await manager.create_node(code_element, vector_config)
 
         # Create relationships (code_element has calls)
         if code_element.calls:
-            manager.create_relationships(code_element, vector_config)
+            await manager.create_relationships(code_element, vector_config)
 
         # Verify workflow before closing
         mock_driver.session.assert_called()
 
         # Close
-        manager.close()
+        await manager.close()
 
         # Verify close was called
         mock_driver.close.assert_called_once()

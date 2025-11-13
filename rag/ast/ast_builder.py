@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import logging
 
+import aiofiles
 from rag.schemas.processed_files_tracker import ProgressState
 from rag.ast.builders import CodeParser, ASTParser, TreeSitterParser
 import asyncio
@@ -11,7 +12,7 @@ from rag.schemas.code_element import CodeElement
 logger = logging.getLogger(__name__)
 
 
-def _save_element_to_file(
+async def _save_element_to_file(
     element: CodeElement, element_id: str, results_dir: Path
 ) -> None:
     """Save a CodeElement to a JSON file.
@@ -24,8 +25,8 @@ def _save_element_to_file(
     element_file = (
         results_dir / f"{element_id.replace('/', '_').replace(':', '_')}.json"
     )
-    with open(element_file, "w", encoding="utf-8") as f:
-        json.dump(element.to_dict(), f, indent=2)
+    async with aiofiles.open(element_file, "w", encoding="utf-8") as f:
+        await f.write(json.dumps(element.to_dict(), indent=2))
 
 
 async def _generate_explanation_with_rate_limit(
@@ -76,14 +77,16 @@ async def _process_single_element(
                 element, llm_provider, semaphore
             )
 
-        _save_element_to_file(element, element_id, results_dir)
+        await _save_element_to_file(element, element_id, results_dir)
         state.add_element(element_id, progress_file)
     except Exception as e:
         logger.exception(f"Error processing element {element_id}: {e}")
         state.add_failed(element_id, progress_file)
 
 
-def _parse_python_file(file_path: Path, parser: CodeParser) -> t.List[CodeElement]:
+async def _parse_python_file(
+    file_path: Path, parser: CodeParser
+) -> t.List[CodeElement]:
     """Parse a Python file and extract code elements.
 
     Args:
@@ -96,7 +99,9 @@ def _parse_python_file(file_path: Path, parser: CodeParser) -> t.List[CodeElemen
     Raises:
         Exception: If parsing fails
     """
-    return parser.parse(file_path.read_text(), str(file_path))
+    async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+        content = await f.read()
+    return parser.parse(content, str(file_path))
 
 
 async def _process_elements_in_file(
@@ -193,7 +198,7 @@ async def build_tree_python_files(
         logger.info(f"Processing file: {python_file_path_str} .....")
 
         try:
-            code_elements = _parse_python_file(python_file_path, parser)
+            code_elements = await _parse_python_file(python_file_path, parser)
         except Exception as e:
             logger.exception(f"Error parsing file {python_file_path_str}: {e}")
             continue
