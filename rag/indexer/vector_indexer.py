@@ -154,8 +154,45 @@ def create_vector_index_from_existing_nodes(
     nodes_to_store = parse_documents_to_nodes(docs)
     docstore = SimpleDocumentStore()
     docstore.add_documents(nodes_to_store)
+
+    # Also query Neo4j to get ALL existing nodes and add them to docstore
+    # This ensures graph expansion can find nodes from previous runs
+    logger.info("Fetching all nodes from Neo4j to populate docstore...")
+    try:
+        from neo4j import GraphDatabase
+
+        driver = GraphDatabase.driver(neo4j_url, auth=(neo4j_user, neo4j_password))
+        with driver.session() as session:
+            result = session.run(
+                f"MATCH (n:{vector_config.node_label}) RETURN n.id AS id, n.text AS text, n"
+            )
+            neo4j_node_count = 0
+            for record in result:
+                node_id = record["id"]
+                # Only add if not already in docstore
+                if node_id not in docstore.docs:
+                    # Create a TextNode from Neo4j data
+                    from llama_index.core.schema import TextNode
+
+                    node_data = dict(record["n"])
+                    text_node = TextNode(
+                        id_=node_id,
+                        text=node_data.get("text", ""),
+                        metadata={
+                            k: v
+                            for k, v in node_data.items()
+                            if k not in ["id", "text", "embedding"]
+                        },
+                    )
+                    docstore.add_documents([text_node])
+                    neo4j_node_count += 1
+        driver.close()
+        logger.info(f"Added {neo4j_node_count} additional nodes from Neo4j to docstore")
+    except Exception as e:
+        logger.warning(f"Could not fetch additional nodes from Neo4j: {e}")
+
     logger.info(
-        f"Hydrated docstore with {len(nodes_to_store)} nodes for keyword retrievers."
+        f"Hydrated docstore with {len(docstore.docs)} total nodes for keyword retrievers."
     )
 
     # Create index from existing Neo4j vector store; then attach docstore + graph_store for hybrid use

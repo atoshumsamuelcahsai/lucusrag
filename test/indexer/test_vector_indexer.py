@@ -125,8 +125,12 @@ class TestCreateVectorIndexFromExistingNodes:
         ) as mock_index, patch(
             "rag.indexer.vector_indexer.parse_documents_to_nodes"
         ) as mock_parse, patch(
+            "rag.indexer.vector_indexer.SimpleDocumentStore"
+        ) as mock_docstore_class, patch(
             "rag.indexer.vector_indexer.logger"
-        ):
+        ), patch(
+            "neo4j.GraphDatabase"
+        ) as mock_graph_db:
 
             mock_config = Mock()
             mock_config.neo4j_url = "bolt://localhost:7687"
@@ -141,11 +145,30 @@ class TestCreateVectorIndexFromExistingNodes:
             mock_from_env.return_value = mock_config
             mock_index_instance = Mock()
             # Make docstore.docs return a dict-like object with len
-            mock_docstore = MagicMock()
-            mock_docstore.docs = {"test-id-1": mock_nodes[0]}
-            mock_index_instance.docstore = mock_docstore
+            mock_docstore_attr = MagicMock()
+            mock_docstore_attr.docs = {"test-id-1": mock_nodes[0]}
+            mock_index_instance.docstore = mock_docstore_attr
             mock_index.return_value = mock_index_instance
             mock_parse.return_value = mock_nodes
+
+            # Create a proper mock docstore instance with docs attribute that supports len()
+            mock_docstore_instance = MagicMock()
+            mock_docstore_instance.docs = {
+                "test-id-1": mock_nodes[0]
+            }  # Real dict that supports len()
+            mock_docstore_class.return_value = mock_docstore_instance
+
+            # Mock Neo4j driver to avoid actual connection attempts
+            mock_driver = Mock()
+            mock_session = MagicMock()
+            mock_result = Mock()
+            # Make result iterable but empty (no additional nodes from Neo4j)
+            mock_result.__iter__ = Mock(return_value=iter([]))
+            mock_session.run.return_value = mock_result
+            # Make session work as a context manager
+            mock_driver.session.return_value = mock_session
+            mock_driver.close = Mock()
+            mock_graph_db.driver.return_value = mock_driver
 
             create_vector_index_from_existing_nodes(vector_config=None, docs=mock_docs)
 
@@ -182,7 +205,9 @@ class TestCreateVectorIndexFromExistingNodes:
             "rag.indexer.vector_indexer.SimpleDocumentStore"
         ) as mock_docstore, patch(
             "rag.indexer.vector_indexer.logger"
-        ):
+        ), patch(
+            "neo4j.GraphDatabase"
+        ) as mock_graph_db:
 
             mock_index_instance = Mock()
             # Make docstore.docs return a dict-like object with len
@@ -191,8 +216,25 @@ class TestCreateVectorIndexFromExistingNodes:
             mock_index_instance.docstore = mock_docstore_attr
             mock_index.return_value = mock_index_instance
             mock_parse.return_value = mock_nodes
-            mock_docstore_instance = Mock()
+
+            # Create a proper mock docstore instance with docs attribute that supports len()
+            mock_docstore_instance = MagicMock()
+            mock_docstore_instance.docs = {
+                "test-id-1": mock_nodes[0]
+            }  # Real dict that supports len()
             mock_docstore.return_value = mock_docstore_instance
+
+            # Mock Neo4j driver to avoid actual connection attempts
+            mock_driver = Mock()
+            mock_session = MagicMock()
+            mock_result = Mock()
+            # Make result iterable but empty (no additional nodes from Neo4j)
+            mock_result.__iter__ = Mock(return_value=iter([]))
+            mock_session.run.return_value = mock_result
+            # Make session work as a context manager
+            mock_driver.session.return_value = mock_session
+            mock_driver.close = Mock()
+            mock_graph_db.driver.return_value = mock_driver
 
             create_vector_index_from_existing_nodes(config, docs=mock_docs)
 

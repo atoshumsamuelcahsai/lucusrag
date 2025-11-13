@@ -1,38 +1,547 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Code Query Interface</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .search-container {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
         #query-input {
             width: 100%;
-            height: 100px;
-            margin-bottom: 10px;
+            min-height: 120px;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: inherit;
+            resize: vertical;
+            transition: border-color 0.3s ease;
         }
+
+        #query-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex: 1;
+            min-width: 120px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .notification {
+            display: none;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+            animation: slideDown 0.3s ease;
+        }
+
+        .notification.show {
+            display: block;
+        }
+
+        .notification.info {
+            background: #e3f2fd;
+            color: #1976d2;
+            border-left: 4px solid #1976d2;
+        }
+
+        .notification.error {
+            background: #ffebee;
+            color: #c62828;
+            border-left: 4px solid #c62828;
+        }
+
+        .notification.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-left: 4px solid #2e7d32;
+        }
+
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading-spinner.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .response-container {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            min-height: 200px;
+        }
+
+        .response-container.hidden {
+            display: none;
+        }
+
         #response {
             white-space: pre-wrap;
+            line-height: 1.6;
+            font-size: 15px;
+            color: #333;
+        }
+
+        .response-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .response-header h2 {
+            font-size: 1.5rem;
+            color: #333;
+        }
+
+        .clear-btn {
+            padding: 8px 16px;
+            font-size: 14px;
             background: #f5f5f5;
-            padding: 10px;
-            border-radius: 4px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .clear-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .progress-report {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            border: 1px solid #e0e0e0;
+            display: none;
+        }
+
+        .progress-report.show {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .progress-header:hover {
+            opacity: 0.8;
+        }
+
+        .progress-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .progress-toggle {
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+            color: #667eea;
+        }
+
+        .progress-toggle.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        .progress-content {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .progress-content.collapsed {
+            display: none;
+        }
+
+        .progress-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .progress-item:last-child {
+            border-bottom: none;
+        }
+
+        .progress-label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .progress-value {
+            color: #333;
+            font-weight: 600;
+            font-family: 'Courier New', monospace;
+        }
+
+        .elapsed-time {
+            font-size: 1.5rem;
+            color: #667eea;
+            font-weight: 700;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .search-container,
+            .response-container {
+                padding: 20px;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+
+            .header h1 {
+                font-size: 1.5rem;
+            }
+
+            #query-input {
+                min-height: 100px;
+                font-size: 14px;
+            }
         }
     </style>
 </head>
 <body>
-    <h1>Code Query Interface</h1>
-    <textarea id="query-input" placeholder="Enter your query here..."></textarea>
-    <button onclick="submitQuery()">Submit Query</button>
-    <div id="response"></div>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Code Query Interface</h1>
+            <p>Search and explore your codebase with AI-powered queries</p>
+        </div>
+
+        <div class="search-container">
+            <div class="input-group">
+                <textarea 
+                    id="query-input" 
+                    placeholder="Enter your query here... (e.g., 'How does authentication work?', 'Find all database connection functions')"
+                ></textarea>
+            </div>
+
+            <div class="notification" id="notification"></div>
+
+            <div class="loading-spinner" id="loading-spinner">
+                <div class="spinner"></div>
+                <p>Processing your query...</p>
+            </div>
+
+            <div class="progress-report" id="progress-report">
+                <div class="progress-header" onclick="toggleProgress()">
+                    <div class="progress-title">
+                        <span class="progress-toggle" id="progress-toggle">▼</span>
+                        <span>Progress Report</span>
+                    </div>
+                    <div class="elapsed-time" id="elapsed-time">0s</div>
+                </div>
+                <div class="progress-content" id="progress-content">
+                    <div class="progress-item">
+                        <span class="progress-label">Status:</span>
+                        <span class="progress-value" id="progress-status">Processing...</span>
+                    </div>
+                    <div class="progress-item">
+                        <span class="progress-label">Elapsed Time:</span>
+                        <span class="progress-value" id="elapsed-detail">0 seconds</span>
+                    </div>
+                    <div class="progress-item">
+                        <span class="progress-label">Query:</span>
+                        <span class="progress-value" id="progress-query" style="max-width: 60%; text-align: right; word-break: break-word;">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn-primary" onclick="submitQuery()" id="submit-btn">
+                    Search
+                </button>
+                <button class="btn-secondary" onclick="clearQuery()">
+                    Clear
+                </button>
+            </div>
+        </div>
+
+        <div class="response-container hidden" id="response-container">
+            <div class="response-header">
+                <h2>Results</h2>
+                <button class="clear-btn" onclick="clearResults()">Clear Results</button>
+            </div>
+            <div id="response" class="empty-state">
+                <div class="empty-state-icon">📄</div>
+                <p>Your query results will appear here</p>
+            </div>
+        </div>
+    </div>
 
     <script>
-        async function submitQuery() {
-            const query = document.getElementById('query-input').value;
-            const response = document.getElementById('response');
+        const queryInput = document.getElementById('query-input');
+        const responseDiv = document.getElementById('response');
+        const responseContainer = document.getElementById('response-container');
+        const submitBtn = document.getElementById('submit-btn');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const notification = document.getElementById('notification');
+        const progressReport = document.getElementById('progress-report');
+        const progressContent = document.getElementById('progress-content');
+        const progressToggle = document.getElementById('progress-toggle');
+        const elapsedTime = document.getElementById('elapsed-time');
+        const elapsedDetail = document.getElementById('elapsed-detail');
+        const progressStatus = document.getElementById('progress-status');
+        const progressQuery = document.getElementById('progress-query');
+
+        let timerInterval = null;
+        let startTime = null;
+        let isProgressCollapsed = false;
+
+        // Allow Enter+Ctrl/Cmd to submit
+        queryInput.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                submitQuery();
+            }
+        });
+
+        function showNotification(message, type = 'info') {
+            notification.textContent = message;
+            notification.className = `notification ${type} show`;
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 5000);
+        }
+
+        function clearQuery() {
+            queryInput.value = '';
+            queryInput.focus();
+        }
+
+        function clearResults() {
+            responseContainer.classList.add('hidden');
+            responseDiv.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📄</div>
+                    <p>Your query results will appear here</p>
+                </div>
+            `;
+        }
+
+        function toggleProgress() {
+            isProgressCollapsed = !isProgressCollapsed;
+            if (isProgressCollapsed) {
+                progressContent.classList.add('collapsed');
+                progressToggle.classList.add('collapsed');
+            } else {
+                progressContent.classList.remove('collapsed');
+                progressToggle.classList.remove('collapsed');
+            }
+        }
+
+        function startProgressTimer() {
+            startTime = Date.now();
+            progressReport.classList.add('show');
+            progressStatus.textContent = 'Processing...';
+            const queryText = queryInput.value.trim();
+            progressQuery.textContent = queryText.substring(0, 50) + (queryText.length > 50 ? '...' : '');
             
+            // Start collapsed by default
+            isProgressCollapsed = true;
+            progressContent.classList.add('collapsed');
+            progressToggle.classList.add('collapsed');
+            
+            // Update immediately
+            elapsedTime.textContent = '0s';
+            elapsedDetail.textContent = '0 seconds';
+            
+            timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                elapsedTime.textContent = `${elapsed}s`;
+                elapsedDetail.textContent = `${elapsed} second${elapsed !== 1 ? 's' : ''}`;
+            }, 100);
+            
+            console.log('Progress timer started');
+        }
+
+        function stopProgressTimer(status = 'Completed') {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            if (startTime) {
+                const totalTime = Math.floor((Date.now() - startTime) / 1000);
+                progressStatus.textContent = status;
+                elapsedTime.textContent = `${totalTime}s`;
+                elapsedDetail.textContent = `${totalTime} second${totalTime !== 1 ? 's' : ''}`;
+            }
+        }
+
+        async function submitQuery() {
+            const query = queryInput.value.trim();
+            
+            if (!query) {
+                showNotification('Please enter a query', 'error');
+                return;
+            }
+
+            // Clear previous results immediately
+            clearResults();
+            
+            // Show loading state
+            submitBtn.disabled = true;
+            loadingSpinner.classList.add('show');
+            showNotification('Searching...', 'info');
+            
+            // Start progress timer
+            startProgressTimer();
+
             try {
                 const result = await fetch('/query', {
                     method: 'POST',
@@ -46,15 +555,39 @@
                 });
                 
                 const data = await result.json();
+                
+                // Hide loading state
+                loadingSpinner.classList.remove('show');
+                submitBtn.disabled = false;
+                
+                // Stop progress timer
+                stopProgressTimer(data.error ? 'Error' : 'Completed');
+
                 if (data.error) {
-                    response.innerHTML = `Error: ${data.error}`;
+                    showNotification(`Error: ${data.error}`, 'error');
+                    responseContainer.classList.remove('hidden');
+                    responseDiv.innerHTML = `<div style="color: #c62828;">Error: ${data.error}</div>`;
                 } else {
-                    response.innerHTML = data.response;
+                    showNotification('Query completed successfully!', 'success');
+                    responseContainer.classList.remove('hidden');
+                    // Format the response nicely
+                    responseDiv.innerHTML = `<div style="white-space: pre-wrap; line-height: 1.8;">${escapeHtml(data.response)}</div>`;
                 }
             } catch (error) {
-                response.innerHTML = `Error: ${error}`;
+                loadingSpinner.classList.remove('show');
+                submitBtn.disabled = false;
+                stopProgressTimer('Error');
+                showNotification(`Network error: ${error.message}`, 'error');
+                responseContainer.classList.remove('hidden');
+                responseDiv.innerHTML = `<div style="color: #c62828;">Error: ${error.message}</div>`;
             }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
     </script>
 </body>
-</html> 
+</html>
