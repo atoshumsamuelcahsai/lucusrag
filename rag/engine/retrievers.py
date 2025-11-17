@@ -1,4 +1,5 @@
 import typing as t
+import time
 from dataclasses import dataclass
 from llama_index.core.schema import NodeWithScore, QueryBundle
 from llama_index.core import VectorStoreIndex
@@ -6,6 +7,7 @@ from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.core.retrievers import BaseRetriever, VectorIndexRetriever
 import asyncio
 import os
+import threading
 
 from llama_index.core.postprocessor import (
     SimilarityPostprocessor,
@@ -19,6 +21,22 @@ from rag.logging_config import get_logger
 
 logger = get_logger(__name__)
 load_dotenv(override=True)  # override=True ensures env vars take precedence
+
+# Thread-local storage for timing information
+_timing_storage = threading.local()
+
+
+def get_timing_info() -> dict:
+    """Get timing information from thread-local storage."""
+    if hasattr(_timing_storage, "timing_info"):
+        return _timing_storage.timing_info.copy()
+    return {}
+
+
+def clear_timing_info() -> None:
+    """Clear timing information from thread-local storage."""
+    if hasattr(_timing_storage, "timing_info"):
+        _timing_storage.timing_info = {}
 
 
 # Registry for retriever factories
@@ -69,6 +87,8 @@ def _rrf_fuse(
     k: int,
     k_rrf: int = 60,
 ) -> list[NodeWithScore]:
+    rrf_start = time.perf_counter()
+
     rank_maps: list[dict[str, int]] = [
         {n.node.node_id: i for i, n in enumerate(lst)} for lst in lists
     ]
@@ -91,9 +111,17 @@ def _rrf_fuse(
                 exemplar[n.node.node_id] = n
 
     fused_ids = sorted(all_ids, key=lambda nid: scores[nid], reverse=True)[:k]
-    return [
+    result = [
         NodeWithScore(node=exemplar[nid].node, score=scores[nid]) for nid in fused_ids
     ]
+
+    rrf_time = time.perf_counter() - rrf_start
+    # Store timing in thread-local storage
+    if not hasattr(_timing_storage, "timing_info"):
+        _timing_storage.timing_info = {}
+    _timing_storage.timing_info["rrf_fusion"] = rrf_time
+
+    return result
 
 
 class HybridRRFRetriever(BaseRetriever):
@@ -155,8 +183,14 @@ def _expand_nodes_via_graph(
     Returns:
         Expanded list of nodes including originals and related nodes
     """
+    graph_start = time.perf_counter()
+
     if not nodes or not hasattr(index, "_graph_store"):
         logger.debug("No nodes to expand or graph_store not available")
+        graph_time = time.perf_counter() - graph_start
+        if not hasattr(_timing_storage, "timing_info"):
+            _timing_storage.timing_info = {}
+        _timing_storage.timing_info["graph_expansion"] = graph_time
         return nodes
 
     graph_store = index._graph_store
@@ -165,6 +199,10 @@ def _expand_nodes_via_graph(
     # Get Neo4j connection from graph store
     if not hasattr(graph_store, "_driver") or graph_store._driver is None:
         logger.warning("Neo4j driver not available for graph expansion")
+        graph_time = time.perf_counter() - graph_start
+        if not hasattr(_timing_storage, "timing_info"):
+            _timing_storage.timing_info = {}
+        _timing_storage.timing_info["graph_expansion"] = graph_time
         return nodes
 
     try:
@@ -293,10 +331,22 @@ def _expand_nodes_via_graph(
             f"({missing_count} found in graph but missing from docstore)"
         )
 
-        return expanded_nodes[:max_expansion_nodes]
+        result = expanded_nodes[:max_expansion_nodes]
+        graph_time = time.perf_counter() - graph_start
+
+        # Store timing in thread-local storage
+        if not hasattr(_timing_storage, "timing_info"):
+            _timing_storage.timing_info = {}
+        _timing_storage.timing_info["graph_expansion"] = graph_time
+
+        return result
 
     except Exception as e:
         logger.error(f"Graph expansion failed: {e}", exc_info=True)
+        graph_time = time.perf_counter() - graph_start
+        if not hasattr(_timing_storage, "timing_info"):
+            _timing_storage.timing_info = {}
+        _timing_storage.timing_info["graph_expansion"] = graph_time
         return nodes
 
 

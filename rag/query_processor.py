@@ -31,7 +31,8 @@ async def initialize_query_engine(
 
         logger.info(f"Creating new Orchestrator with cache dir: {ast_cache_dir}")
         try:
-            _orchestrator = CodeGraphIndexer(ast_cache_dir)
+            # Use top_k=15 to get more candidates for adaptive K selection
+            _orchestrator = CodeGraphIndexer(ast_cache_dir, top_k=15)
             if initialize_mode == "cold":
                 await _orchestrator.build()
             elif initialize_mode == "refresh":

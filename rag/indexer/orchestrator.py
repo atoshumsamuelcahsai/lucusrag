@@ -17,6 +17,7 @@ from rag.indexer.vector_indexer import (
     graph_configure_settings,
 )
 from rag.engine.engine import make_query_engine, retrieve_documents_from_engine
+from rag.engine.timed_query_engine import TimedQueryEngine
 from rag.schemas.vector_config import VectorIndexConfig
 from rag.logging_config import get_logger
 import aiofiles  # type: ignore
@@ -72,8 +73,11 @@ class CodeGraphIndexer:
         self.schema_version = schema_version
         self.top_k = top_k
 
+        logger.info(f"Initializing CodeGraphIndexer with top_k={top_k}")
+
         self._index: Optional[VectorStoreIndex] = None
         self._engine: Optional[RetrieverQueryEngine] = None
+        self._timed_engine: Optional[TimedQueryEngine] = None
 
     async def build(self) -> BuildResult:
         """
@@ -106,6 +110,7 @@ class CodeGraphIndexer:
 
         # Wire query engine
         self._engine = make_query_engine(self._index, k=self.top_k)
+        self._timed_engine = TimedQueryEngine(self._engine)
 
         dt = time.perf_counter() - t0
         logger.info(f"Cold build successfully finished in {dt:.2f}s")
@@ -158,6 +163,7 @@ class CodeGraphIndexer:
         # Phase 2: Recreate vector index
         self._index = await create_vector_index_from_existing_nodes(config, docs=docs)
         self._engine = make_query_engine(self._index, k=self.top_k)
+        self._timed_engine = TimedQueryEngine(self._engine)
         logger.info("Vector index recreated successfully")
 
         dt = time.perf_counter() - t0
@@ -185,7 +191,9 @@ class CodeGraphIndexer:
     async def aquery(self, text: str) -> str:
         if not self._engine:
             raise RuntimeError("Indexer not built. Call build() or refresh() first.")
-        resp = await self._engine.aquery(text)
+        if not self._timed_engine:
+            self._timed_engine = TimedQueryEngine(self._engine)
+        resp = await self._timed_engine.aquery(text)
         return str(resp)
 
     async def retrieve_documents(self, query: str, k: int = 20) -> list[Dict[str, Any]]:

@@ -1,115 +1,208 @@
 # LucusRAG
+**A Production-Grade Retrieval-Augmented Generation (RAG) System for Code Understanding**
 
-A production-ready Retrieval-Augmented Generation (RAG) system for code search and understanding, combining semantic search, graph traversal, and hybrid retrieval strategies.
 
-## About This Project
+LucusRAG is a hybrid retrieval system that combines Tree-Sitter AST parsing, graph-based program analysis, neural reranking, and a probabilistic Adaptive-K policy to deliver **fast, accurate, and cost-efficient code understanding**.
 
-This project represents my journey from proof-of-concept to production-ready software, demonstrating advanced RAG techniques and modern software engineering practices.
+**Performance highlights:**
+- **2.5× faster** query time
+- **60–64% cheaper** per request
+- **8.6/10 accuracy** on complex code queries
+- Hybrid retrieval: BM25 + Vector + Graph + rrf +  Reranker
 
-**Origin Story:**
-The initial concept emerged from identifying a real-world need at my previous company—building a centralized knowledge base combining code repositories, Confluence docs, and other documentation for customer support, product, and engineering teams. I developed the initial proof-of-concept independently on my own time to validate the technical approach.
+---
 
-**From POC to Production:**
-This repository is a complete ground-up implementation showcasing my ability to architect production-ready systems. Key improvements include:
+## TL;DR
+LucusRAG builds an indexed code graph from a repository, enriches it with embeddings, and performs hybrid retrieval with neural reranking and cost-aware Adaptive-K context selection.
 
-- ✅ **Clean Architecture:** Well-structured codebase with separation of concerns (ingestion, indexing, querying)
-- ✅ **Comprehensive Testing:**  unit tests with pytest, including integration and edge cases
-- ✅ **Production Infrastructure:** Docker containerization, docker-compose orchestration, and CI/CD with pre-commit hooks
-- ✅ **Advanced Features:** AST-based code parsing, graph-based context expansion, hybrid retrieval strategies
-- ✅ **Type Safety:** Full mypy type checking and static analysis
-- ✅ **Modern DevOps:** Black, ruff, bandit, pip-audit for code quality and security
+Ideal for:
+- Engineering knowledge bases
+- Large multi-file repositories
+- Production RAG systems
+- Cost‑efficient retrieval pipelines
 
-This project is actively used for my Lucus project (WiFi location algorithms) and serves as a foundation for building intelligent code analysis systems.
+---
 
-## Prerequisites
+## 🔍 Key Features
+- **Hybrid Retrieval**: BM25 + dense embeddings + graph expansion
+- **Graph-Aware Context**: Neo4j program graph (CALLS, INHERITS_FROM, DEPENDS_ON)
+- **Neural Reranking**: Cross-encoder fine-grained scoring
+- **Adaptive-K Policy**: Dynamic, budget-aware context selection
+- **AST-Aware Chunking**: Tree-Sitter parsing
+- **Production Engineering**: Docker, CI/CD, strict mypy, pre-commit
 
-- Python 3.9+
-- Conda (recommended) or virtualenv
-- Docker and Docker Compose
-- Neo4j (via Docker Compose)
+---
 
-## Installation
+##  Architecture Overview
 
-### 1. Clone the Repository
-
-```bash
-git clone <repository-url>
-cd lucusrag
+### **Indexing Pipeline**
+```
+Phase 1 → AST → Neo4j Graph
+Phase 2 → Embeddings → Neo4j Vector Fields
+Phase 3 → Vector Index → Ready for Retrieval
 ```
 
-### 2. Create Conda Environment
+### **Query Pipeline**
+```
+Query
+ ↓
+BM25 + Vector
+ ↓
+RRF Fusion
+ ↓
+Graph Expansion
+ ↓
+Cross‑Encoder Reranking
+ ↓
+Adaptive‑K Selection
+ ↓
+LLM Response
+```
 
-```bash
+---
+
+## Performance Summary
+| Metric | Result |
+|--------|--------|
+| Average Accuracy | **8.6/10** |
+| Focused Queries | **9.2/10** |
+| Response Time | **2.5× faster** |
+| Cost per Query | **~$0.01 (↓60%)** |
+
+Full results: `docs/LUCUSRAG_PAPER.pdf`
+
+---
+
+## ⚙️ Quick Start
+
+### 1. Clone & Setup
+```
+git clone <repo-url>
+cd lucusrag
+
 conda create -n lucusrag python=3.11
 conda activate lucusrag
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
-### 3. Install Dependencies
-
-```bash
-# Install production dependencies
-pip install -r requirments.txt
-
-# Install development dependencies
-pip install -r requirments-dev.txt
+Install Git hooks:
 ```
-
-### 4. Install Pre-commit Hooks **IMPORTANT**
-
-**This step is required for git hooks to work!** After installing dependencies, you must install the pre-commit hooks:
-
-```bash
-# Install pre-commit hooks (runs on git commit and push)
 pre-commit install --hook-type pre-commit --hook-type pre-push
 ```
 
-**Why this is needed:** Installing the `pre-commit` package doesn't automatically set up git hooks. You must run `pre-commit install` once per repository to configure git to run the hooks.
-
-Verify installation:
-```bash
-ls -la .git/hooks/pre-commit .git/hooks/pre-push
+### 2. Start Neo4j
 ```
-
-### 5. Configure Environment Variables
-
-Create a `.env` file in the project root:
-
-```bash for example
-# Neo4j Configuration
-NEO4J_URL=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=password
-
-# Vector Index Configuration
-VECTOR_INDEX_NAME=lucus_code_embeddings
-VECTOR_DIMENSION=1536
-NODE_LABEL=LucusCodeElement
-VECTOR_PROPERTY=embedding
-SIMILARITY_METRIC=cosine
-
-# LLM Configuration (single source of truth)
-LLM_PROVIDER=anthropic  # Options: anthropic, openai
-LLM_MODEL=claude-3-5-sonnet  # Model name (e.g., claude-3-5-sonnet, gpt-4, gpt-4-turbo)
-LLM_TEMPERATURE=0  # Optional, default: 0
-LLM_MAX_OUTPUT_TOKENS=768  # Maximum output tokens (default: 768)
-LLM_CONTEXT_WINDOW=4200  # Optional, default: 4200
-
-# Embedding Configuration
-EMBEDDING_PROVIDER=voyage  # Options: voyage, voyage-large, voyage-lite, text-embedding-3-small
-
-# API Keys (add your keys)
-ANTHROPIC_API_KEY=your_key_here
-VOYAGE_API_KEY=your_key_here
-OPENAI_API_KEY=your_key_here  # Optional, required if using OpenAI LLM or embeddings
-```
-
-### 6. Start Neo4j with Docker Compose
-
-```bash
 docker-compose up -d
 ```
 
-Verify Neo4j is running:
-- Browser UI: http://localhost:7474
-- Bolt endpoint: bolt://localhost:7687
+### 3. Build AST Files
+```
+python -m rag.ast.ast_builder --root-dir ./rag --output-dir ./ast_cache --parser-type tree-sitter
+```
 
+Or programmatically:
+```python
+from rag.ast.ast_builder import analyze_and_store_python_files
+
+output_path = await analyze_and_store_python_files(
+    root_dir="./rag",
+    output_path="./ast_cache",
+    parser_type="tree-sitter"
+)
+```
+
+### 4. Build the Index
+```
+from rag.indexer.orchestrator import CodeGraphIndexer
+
+indexer = CodeGraphIndexer(ast_cache_dir="./ast_cache", top_k=5)
+await indexer.build()
+```
+
+### 5. Run a Query
+```
+from rag.query_processor import process_query
+
+response = await process_query("Explain graph expansion")
+print(response)
+```
+
+---
+
+## Project Structure
+```
+lucusrag/
+├── rag/               # Core RAG engine
+├── docs/              # Paper + architecture
+├── test/              # Unit + integration tests (85% coverage)
+├── evaluation/        # Evaluation notebook
+├── Dockerfile
+├── docker-compose.yaml
+└── README.md
+```
+
+---
+
+## Testing & CI/CD
+```
+pytest --cov=rag --cov-report=html
+```
+
+Tools:
+- pytest
+- coverage
+- mypy (strict)
+- Ruff
+- Black
+- Bandit
+- pip-audit
+- pre-commit hooks
+
+---
+
+## Configuration
+
+Create `.env`:
+```
+NEO4J_URL=bolt://localhost:7687
+LLM_PROVIDER=anthropic
+EMBEDDING_PROVIDER=voyage
+OPENAI_API_KEY=your_key
+ANTHROPIC_API_KEY=your_key
+VOYAGE_API_KEY=your_key
+```
+
+Adaptive-K settings:
+```
+probability_target=0.70
+k_min=2
+k_max=10
+max_cost_per_query=0.01
+```
+
+---
+
+## Documentation
+- Architecture: `docs/ARCHITECTURE.md`
+- Technical paper: `docs/LUCUSRAG_PAPER.pdf`
+- Evaluation notebook & test queries data: `/evaluation/`
+
+---
+
+## Contributing
+1. Fork the repository
+2. Create a branch
+3. Install pre-commit hooks
+4. Add tests
+5. Ensure tests pass
+6. Open a PR
+
+---
+
+## License
+MIT License.
+
+---
+
+## ❤️ Built for production-grade code understanding.

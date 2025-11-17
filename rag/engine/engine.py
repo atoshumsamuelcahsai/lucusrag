@@ -8,6 +8,8 @@ from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core import VectorStoreIndex
 from rag.engine import retrievers
 from rag.logging_config import get_logger
+import os
+from rag.providers.llms import get_llm
 
 
 # Load environment variables (search parent directories to find .env in project root)
@@ -43,12 +45,34 @@ def make_query_engine(
     logger.info(
         f"Using retriever type: {retriever_type} ==============================="
     )
+    logger.info(f"Top-K documents for retrieval: {k}")
 
     factory = retrievers.get_retriever(retriever_type)
     spec = factory(index, k, **retriever_kwargs)
 
+    # Get LLM with logging
+    llm_provider = os.getenv("LLM_PROVIDER", "anthropic")
+    llm_model = os.getenv("LLM_MODEL", "default")
+    llm = get_llm(llm_provider)
+    logger.info(f"Using LLM: {llm_provider} / {llm_model}")
+
+    # Get response mode from environment variable (default: COMPACT for speed)
+    # Options: COMPACT (fast, 1 LLM call), TREE_SUMMARIZE (slow, multiple calls),
+    #          REFINE (iterative), SIMPLE_SUMMARIZE (basic)
+    response_mode_str = os.getenv("RESPONSE_MODE", "COMPACT").upper()
+    try:
+        response_mode = ResponseMode[response_mode_str]
+    except KeyError:
+        logger.warning(
+            f"Invalid RESPONSE_MODE '{response_mode_str}', falling back to COMPACT. "
+            f"Valid options: {[mode.name for mode in ResponseMode]}"
+        )
+        response_mode = ResponseMode.COMPACT
+
+    logger.info(f"Using response mode: {response_mode.name}")
+
     synth = get_response_synthesizer(
-        response_mode=ResponseMode.TREE_SUMMARIZE, verbose=True, use_async=True
+        response_mode=response_mode, verbose=True, use_async=True, llm=llm
     )
     return RetrieverQueryEngine(
         retriever=spec.retriever,
