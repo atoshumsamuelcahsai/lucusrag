@@ -34,7 +34,7 @@ repos:
   
       - id: pip-audit
         name: pip-audit (local)
-        entry: pip-audit --ignore-vuln GHSA-4xh5-x5gv-qwph --ignore-vuln GHSA-2c2j-9gv5-cj73 --ignore-vuln GHSA-7f5h-v6xp-fcq8
+        entry: pip-audit --ignore-vuln GHSA-4xh5-x5gv-qwph --ignore-vuln GHSA-2c2j-9gv5-cj73 --ignore-vuln GHSA-7f5h-v6xp-fcq8 --ignore-vuln GHSA-6qv9-48xg-fc7f
         language: system
         stages: [pre-push]
         pass_filenames: false

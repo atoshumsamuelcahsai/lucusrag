@@ -24,13 +24,18 @@ class TestMakeQueryEngine:
             mock_factory.return_value = Mock(retriever=Mock(), postprocessors=[])
             mock_retrievers.get_retriever.return_value = mock_factory
 
-            with patch("rag.engine.engine.get_response_synthesizer") as mock_synth:
-                mock_synth.return_value = Mock()
-                engine = make_query_engine(mock_index, k=10)
+            with patch("rag.engine.engine.get_llm") as mock_get_llm:
+                mock_llm = Mock()
+                mock_get_llm.return_value = mock_llm
 
-                assert isinstance(engine, RetrieverQueryEngine)
-                mock_retrievers.get_retriever.assert_called_once_with("vector")
-                mock_factory.assert_called_once_with(mock_index, 10)
+                with patch("rag.engine.engine.get_response_synthesizer") as mock_synth:
+                    mock_synth.return_value = Mock()
+                    engine = make_query_engine(mock_index, k=10)
+
+                    assert isinstance(engine, RetrieverQueryEngine)
+                    mock_retrievers.get_retriever.assert_called_once_with("vector")
+                    mock_factory.assert_called_once_with(mock_index, 10)
+                    mock_get_llm.assert_called_once()
 
     def test_make_query_engine_custom_retriever_type(self):
         """Test creating query engine with custom retriever type."""
@@ -41,13 +46,18 @@ class TestMakeQueryEngine:
             mock_factory.return_value = Mock(retriever=Mock(), postprocessors=[])
             mock_retrievers.get_retriever.return_value = mock_factory
 
-            with patch("rag.engine.engine.get_response_synthesizer") as mock_synth:
-                mock_synth.return_value = Mock()
-                engine = make_query_engine(mock_index, k=5, retriever_type="bm25")
+            with patch("rag.engine.engine.get_llm") as mock_get_llm:
+                mock_llm = Mock()
+                mock_get_llm.return_value = mock_llm
 
-                assert isinstance(engine, RetrieverQueryEngine)
-                mock_retrievers.get_retriever.assert_called_once_with("bm25")
-                mock_factory.assert_called_once_with(mock_index, 5)
+                with patch("rag.engine.engine.get_response_synthesizer") as mock_synth:
+                    mock_synth.return_value = Mock()
+                    engine = make_query_engine(mock_index, k=5, retriever_type="bm25")
+
+                    assert isinstance(engine, RetrieverQueryEngine)
+                    mock_retrievers.get_retriever.assert_called_once_with("bm25")
+                    mock_factory.assert_called_once_with(mock_index, 5)
+                    mock_get_llm.assert_called_once()
 
     def test_make_query_engine_invalid_retriever_type(self):
         """Test that invalid retriever type raises ValueError."""

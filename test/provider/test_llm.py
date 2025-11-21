@@ -17,6 +17,8 @@ def test_get_anthropic_llm_raises_if_env_missing(monkeypatch):
 def test_get_anthropic_llm_returns_instance(monkeypatch):
     # Test: Returns Anthropic instance when key exists
     monkeypatch.setenv("ANTHROPIC_API_KEY", "FAKE_KEY")
+    monkeypatch.delenv("LLM_MODEL", raising=False)  # Clear any existing LLM_MODEL
+    monkeypatch.delenv("LLM_MAX_OUTPUT_TOKENS", raising=False)  # Clear any existing
 
     class DummyAnthropic:
         def __init__(self, **kwargs):
@@ -28,15 +30,16 @@ def test_get_anthropic_llm_returns_instance(monkeypatch):
     llm = llm_mod.get_anthropic_llm(max_output_tokens=123, temperature=0.7)
 
     assert isinstance(llm, DummyAnthropic)
-    assert llm.kwargs["model"] == "gpt-4o-mini"  # Default from env or function
+    assert llm.kwargs["model"] == "claude-3-5-sonnet"  # Default from function
     assert llm.kwargs["api_key"] == "FAKE_KEY"
-    assert llm.kwargs["max_tokens"] == 756
+    assert llm.kwargs["max_tokens"] == 123  # Uses passed value
     assert llm.kwargs["temperature"] == 0.7
 
 
 def test_get_llm_with_string_provider(monkeypatch):
     # Test: get_llm resolves correctly for string provider
     monkeypatch.setenv("ANTHROPIC_API_KEY", "TESTKEY")
+    monkeypatch.delenv("LLM_MAX_OUTPUT_TOKENS", raising=False)  # Clear any existing
 
     class DummyAnthropic:
         def __init__(self, **kwargs):
@@ -47,7 +50,7 @@ def test_get_llm_with_string_provider(monkeypatch):
     llm = llm_mod.get_llm("anthropic", max_output_tokens=222, temperature=0.1)
     assert isinstance(llm, DummyAnthropic)
     assert llm.kwargs["api_key"] == "TESTKEY"
-    assert llm.kwargs["max_tokens"] == 756
+    assert llm.kwargs["max_tokens"] == 222  # Uses passed value
     assert llm.kwargs["temperature"] == 0.1
 
 
