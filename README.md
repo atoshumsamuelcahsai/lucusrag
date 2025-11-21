@@ -1,5 +1,7 @@
 # LucusRAG
+
 [![CI](https://github.com/atoshumsamuelcahsai/lucusrag/actions/workflows/ci.yml/badge.svg)](https://github.com/atoshumsamuelcahsai/lucusrag/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/atoshumsamuelcahsai/lucusrag/branch/master/graph/badge.svg?token=)](https://codecov.io/gh/atoshumsamuelcahsai/lucusrag)
 
 **A Production-Grade Retrieval-Augmented Generation (RAG) System for Code Understanding**
 
