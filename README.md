@@ -6,7 +6,7 @@
 **A Production-Grade Retrieval-Augmented Generation (RAG) System for Code Understanding**
 
 
-LucusRAG is a hybrid retrieval system that combines Tree-Sitter AST parsing, graph-based program analysis, neural reranking, and a probabilistic Adaptive-K policy to deliver **fast, accurate, and cost-efficient code understanding**.
+LucusRAG is a hybrid retrieval system that combines Tree-Sitter AST parsing, graph-based program analysis, LLM-augmented semantic explanations, rrf fusion, and neural reranking, and a probabilistic Adaptive-K policy to deliver **fast, accurate, and cost-efficient code understanding**.
 
 **Performance highlights:**
 - **2.5× faster** query time
@@ -33,6 +33,7 @@ Ideal for:
 - **Neural Reranking**: Cross-encoder fine-grained scoring
 - **Adaptive-K Policy**: Dynamic, budget-aware context selection
 - **AST-Aware Chunking**: Tree-Sitter parsing
+- **LLM Explanation Augmentation**: AI-generated semantic explanations for improved retrieval discriminability
 - **Production Engineering**: Docker, CI/CD, strict mypy, pre-commit
 
 ---
