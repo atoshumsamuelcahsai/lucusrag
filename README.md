@@ -1,5 +1,6 @@
 # LucusRAG
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/ff25ca52e8e4476388db4568687ef61b)](https://app.codacy.com/gh/atoshumsamuelcahsai/lucusrag?utm_source=github.com&utm_medium=referral&utm_content=atoshumsamuelcahsai/lucusrag&utm_campaign=Badge_Grade)
 [![CI](https://github.com/atoshumsamuelcahsai/lucusrag/actions/workflows/ci.yml/badge.svg)](https://github.com/atoshumsamuelcahsai/lucusrag/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/atoshumsamuelcahsai/lucusrag/branch/master/graph/badge.svg?token=)](https://codecov.io/gh/atoshumsamuelcahsai/lucusrag)
 
